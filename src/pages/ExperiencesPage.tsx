@@ -1,13 +1,15 @@
-import React, { useState } from 'react';
-import { MOCK_EXPERIENCES } from '../data/mockData';
+import React, { useEffect, useState } from 'react';
+import { catalogApi } from '../api/catalogApi';
 import { ExperienceCard } from '../components/cards/ExperienceCard';
-import { Sparkles, Clock } from 'lucide-react';
+import { Sparkles, Loader2 } from 'lucide-react';
 import { CheckoutModal } from '../components/booking/CheckoutModal';
 import { DigitalTicketModal } from '../components/booking/DigitalTicketModal';
 import { Booking, Experience } from '../types';
 import { calculatePrice } from '../utils/pricing';
 
 export const ExperiencesPage: React.FC = () => {
+  const [experiences, setExperiences] = useState<Experience[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
   const [selectedExp, setSelectedExp] = useState<Experience | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<string>('03:30 PM');
   const [guestCount, setGuestCount] = useState<number>(2);
@@ -15,6 +17,42 @@ export const ExperiencesPage: React.FC = () => {
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [completedBooking, setCompletedBooking] = useState<Booking | null>(null);
   const [digitalTicketOpen, setDigitalTicketOpen] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    async function fetchExperiences() {
+      setLoading(true);
+      try {
+        const items = await catalogApi.getByCategory('experiences');
+        if (!mounted) return;
+        const expList: Experience[] = items.map((item) => ({
+          id: item.id,
+          title: item.title,
+          category: item.metadata?.activityType || 'Indoor Play',
+          image: item.image,
+          rating: item.rating || 4.8,
+          reviewsCount: item.reviewCount || 850,
+          pricePerPerson: item.priceFrom || 499,
+          duration: item.metadata?.duration || '1 Hour',
+          city: item.city || 'Asansol',
+          address: item.location || 'Mall Arena',
+          timeSlots: (item.metadata?.timeSlots || ['02:00 PM', '04:00 PM', '06:00 PM']).map((t: string) => ({
+            time: t,
+            availableCapacity: 8
+          })),
+          highlights: item.metadata?.highlights || ['Equipment Provided']
+        }));
+        setExperiences(expList);
+      } catch (err) {
+        console.error('Experiences load error:', err);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    }
+
+    fetchExperiences();
+    return () => { mounted = false; };
+  }, []);
 
   const priceBreakdown = selectedExp
     ? calculatePrice(selectedExp.pricePerPerson, guestCount)
@@ -31,19 +69,31 @@ export const ExperiencesPage: React.FC = () => {
         <p className="text-slate-400 text-sm">VR arenas, bowling lanes, escape rooms & cooking workshops</p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        {MOCK_EXPERIENCES.map((exp) => (
-          <div key={exp.id} className="flex flex-col">
-            <ExperienceCard experience={exp} />
-            <button
-              onClick={() => setSelectedExp(exp)}
-              className="mt-3 py-2.5 bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs rounded-xl shadow-lg transition-all"
-            >
-              Select Time Slot
-            </button>
-          </div>
-        ))}
-      </div>
+      {loading ? (
+        <div className="flex flex-col items-center justify-center py-16 text-slate-400 gap-3">
+          <Loader2 className="w-8 h-8 text-amber-500 animate-spin" />
+          <span className="text-xs font-bold uppercase tracking-wider">Loading Experiences from Database...</span>
+        </div>
+      ) : experiences.length === 0 ? (
+        <div className="p-12 text-center bg-slate-900/40 border border-slate-800 rounded-3xl space-y-2">
+          <h3 className="text-lg font-bold text-white">No Experiences Found</h3>
+          <p className="text-xs text-slate-400">Check back later for new gaming & leisure activities.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {experiences.map((exp) => (
+            <div key={exp.id} className="flex flex-col">
+              <ExperienceCard experience={exp} />
+              <button
+                onClick={() => setSelectedExp(exp)}
+                className="mt-3 py-2.5 bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs rounded-xl shadow-lg transition-all"
+              >
+                Select Time Slot
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Time Slot Picker Modal */}
       {selectedExp && (

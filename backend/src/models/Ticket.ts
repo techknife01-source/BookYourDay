@@ -15,7 +15,7 @@ export interface ITicket extends Document {
 }
 
 const TicketSchema = new Schema<ITicket>({
-  bookingId: { type: Schema.Types.ObjectId, ref: 'Booking', required: true, index: true },
+  bookingId: { type: Schema.Types.Mixed, ref: 'Booking', required: true, index: true },
   ticketNumber: { type: String, required: true, unique: true },
   userId: { type: String, required: true, index: true },
   itemTitle: { type: String, required: true },

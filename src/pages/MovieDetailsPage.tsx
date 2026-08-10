@@ -1,17 +1,19 @@
-import React, { useState } from 'react';
-import { useParams, useNavigate } from 'react'
-import { Star, Clock, Calendar, MapPin, Play, Film, Check, ArrowLeft } from 'lucide-react';
-import { MOCK_MOVIES, MOCK_CINEMAS } from '../data/mockData';
+import React, { useEffect, useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { Star, ArrowLeft, Loader2 } from 'lucide-react';
+import { catalogApi } from '../api/catalogApi';
+import { MOCK_CINEMAS } from '../data/mockData';
 import { SeatSelector } from '../components/booking/SeatSelector';
 import { CheckoutModal } from '../components/booking/CheckoutModal';
 import { DigitalTicketModal } from '../components/booking/DigitalTicketModal';
-import { Booking, Seat } from '../types';
+import { Booking, Seat, Movie } from '../types';
 import { PriceBreakdown } from '../utils/pricing';
 
 export const MovieDetailsPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const movie = MOCK_MOVIES.find((m) => m.id === id) || MOCK_MOVIES[0];
+  const [movie, setMovie] = useState<Movie | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
 
   const [selectedDate, setSelectedDate] = useState('Today, 10 Aug');
   const [selectedFormat, setSelectedFormat] = useState('IMAX 3D');
@@ -22,6 +24,43 @@ export const MovieDetailsPage: React.FC = () => {
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [completedBooking, setCompletedBooking] = useState<Booking | null>(null);
   const [digitalTicketOpen, setDigitalTicketOpen] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    async function fetchMovieDetails() {
+      if (!id) return;
+      setLoading(true);
+      try {
+        const item = await catalogApi.getItemById('movies', id);
+        if (!mounted) return;
+        if (item) {
+          setMovie({
+            id: item.id,
+            title: item.title,
+            poster: item.image,
+            backdrop: item.backdrop || item.image,
+            rating: item.rating || 4.8,
+            votesCount: item.reviewCount || 12000,
+            genre: item.metadata?.genre || ['Action', 'Sci-Fi'],
+            language: item.metadata?.language || ['English', 'Hindi'],
+            duration: item.metadata?.duration || '2h 30m',
+            releaseDate: item.metadata?.releaseDate || '2026',
+            format: item.metadata?.format || ['2D', '3D', 'IMAX 3D'],
+            description: item.description,
+            cast: item.metadata?.cast || [{ name: 'Lead Actor', role: 'Main', avatar: '' }],
+            director: item.metadata?.director || 'Director'
+          });
+        }
+      } catch (err) {
+        console.error('Movie details fetch error:', err);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    }
+
+    fetchMovieDetails();
+    return () => { mounted = false; };
+  }, [id]);
 
   const handleSelectShow = (cinemaName: string, showtime: string, price: number) => {
     setActiveShow({ cinemaName, showtime, price });
@@ -38,6 +77,30 @@ export const MovieDetailsPage: React.FC = () => {
     setCompletedBooking(booking);
     setDigitalTicketOpen(true);
   };
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-slate-400 gap-3">
+        <Loader2 className="w-8 h-8 text-rose-500 animate-spin" />
+        <span className="text-xs font-bold uppercase tracking-wider">Fetching Movie Details...</span>
+      </div>
+    );
+  }
+
+  if (!movie) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 py-16 text-center space-y-4">
+        <h2 className="text-xl font-bold text-white">Movie Not Found</h2>
+        <p className="text-xs text-slate-400">The requested movie could not be retrieved from the database.</p>
+        <button
+          onClick={() => navigate('/movies')}
+          className="px-6 py-2 bg-rose-600 text-white text-xs font-bold rounded-xl"
+        >
+          Back to Movies
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-12 pb-16">

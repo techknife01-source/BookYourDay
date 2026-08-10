@@ -26,4 +26,6 @@ const ExperienceSchema = new Schema<IExperience>({
   isPopular: { type: Boolean, default: false }
 });
 
+ExperienceSchema.index({ title: 1, city: 1, pricePerPerson: 1, rating: -1 });
+
 export const ExperienceModel: Model<IExperience> = (mongoose.models.Experience || mongoose.model<IExperience>('Experience', ExperienceSchema)) as any;

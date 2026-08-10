@@ -17,13 +17,17 @@ export interface IBooking extends Document {
   taxes: number;
   discount: number;
   totalAmount: number;
-  status: 'CONFIRMED' | 'PAYMENT_PENDING' | 'CANCELLED' | 'REFUNDED';
+  status: 'CONFIRMED' | 'PAYMENT_PENDING' | 'CANCELLED' | 'REFUNDED' | 'EXPIRED';
   paymentMethod: string;
   paymentTransactionId: string;
+  razorpayOrderId?: string;
+  expiresAt?: Date;
   qrCodeData: string;
   customerName: string;
   customerEmail: string;
   customerPhone: string;
+  showId?: string;
+  idempotencyKey?: string;
   createdAt: Date;
 }
 
@@ -44,13 +48,17 @@ const BookingSchema = new Schema<IBooking>({
   taxes: { type: Number, required: true },
   discount: { type: Number, default: 0 },
   totalAmount: { type: Number, required: true },
-  status: { type: String, enum: ['CONFIRMED', 'PAYMENT_PENDING', 'CANCELLED', 'REFUNDED'], default: 'CONFIRMED' },
+  status: { type: String, enum: ['CONFIRMED', 'PAYMENT_PENDING', 'CANCELLED', 'REFUNDED', 'EXPIRED'], default: 'PAYMENT_PENDING' },
   paymentMethod: { type: String, default: 'UPI' },
-  paymentTransactionId: { type: String, required: true },
+  paymentTransactionId: { type: String, default: '' },
+  razorpayOrderId: { type: String, index: true },
+  expiresAt: { type: Date, index: true },
   qrCodeData: { type: String, required: true },
   customerName: { type: String, required: true },
   customerEmail: { type: String, required: true },
   customerPhone: { type: String, required: true },
+  showId: { type: String, index: true },
+  idempotencyKey: { type: String, index: true },
   createdAt: { type: Date, default: Date.now }
 });
 

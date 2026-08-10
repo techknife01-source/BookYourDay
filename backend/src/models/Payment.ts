@@ -4,22 +4,42 @@ export interface IPayment extends Document {
   transactionId: string;
   bookingId: mongoose.Types.ObjectId | string;
   userId: string;
+  razorpayOrderId?: string;
+  razorpayPaymentId?: string;
+  razorpaySignature?: string;
   amount: number;
-  paymentMethod: 'UPI' | 'CREDIT_CARD' | 'DEBIT_CARD' | 'NET_BANKING' | 'WALLET';
+  currency: string;
+  paymentMethod: string;
   gatewayResponseCode?: string;
-  status: 'SUCCESS' | 'PENDING' | 'FAILED' | 'REFUNDED';
+  status: 'PENDING' | 'SUCCESS' | 'FAILED' | 'REFUNDED' | 'REFUND_PENDING' | 'REFUND_FAILED';
+  failureReason?: string;
+  refundId?: string;
   createdAt: Date;
+  updatedAt: Date;
 }
 
 const PaymentSchema = new Schema<IPayment>({
   transactionId: { type: String, required: true, unique: true },
   bookingId: { type: Schema.Types.ObjectId, ref: 'Booking', required: true, index: true },
   userId: { type: String, required: true, index: true },
+  razorpayOrderId: { type: String, index: true },
+  razorpayPaymentId: { type: String, index: true },
+  razorpaySignature: { type: String },
   amount: { type: Number, required: true },
-  paymentMethod: { type: String, enum: ['UPI', 'CREDIT_CARD', 'DEBIT_CARD', 'NET_BANKING', 'WALLET'], default: 'UPI' },
+  currency: { type: String, default: 'INR' },
+  paymentMethod: { type: String, default: 'UPI' },
   gatewayResponseCode: { type: String },
-  status: { type: String, enum: ['SUCCESS', 'PENDING', 'FAILED', 'REFUNDED'], default: 'SUCCESS' },
-  createdAt: { type: Date, default: Date.now }
+  status: { type: String, enum: ['PENDING', 'SUCCESS', 'FAILED', 'REFUNDED', 'REFUND_PENDING', 'REFUND_FAILED'], default: 'PENDING' },
+  failureReason: { type: String },
+  refundId: { type: String },
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
 });
 
+PaymentSchema.index({ razorpayOrderId: 1 });
+PaymentSchema.index({ razorpayPaymentId: 1 });
+PaymentSchema.index({ bookingId: 1 });
+PaymentSchema.index({ userId: 1 });
+
 export const PaymentModel: Model<IPayment> = (mongoose.models.Payment || mongoose.model<IPayment>('Payment', PaymentSchema)) as any;
+

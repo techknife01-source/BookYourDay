@@ -199,8 +199,71 @@ export interface UserProfile {
   name: string;
   email: string;
   phone: string;
+  role?: 'user' | 'partner' | 'admin';
   walletBalance: number;
   isMemberPlus: boolean;
   memberPlusExpiry?: string;
   savedCity: string;
+  wishlist?: string[];
 }
+
+export interface CatalogItem {
+  id: string;
+  category: 'MOVIE' | 'EVENT' | 'SPORTS' | 'ATTRACTION' | 'RESTAURANT' | 'EXPERIENCE';
+  title: string;
+  description: string;
+  image: string;
+  backdrop?: string;
+  location?: string;
+  city?: string;
+  rating?: number;
+  reviewCount?: number;
+  priceFrom?: number;
+  currency?: string;
+  availability?: 'AVAILABLE' | 'FEW_LEFT' | 'SOLD_OUT';
+  metadata: Record<string, any>;
+}
+
+export interface ApiResponse<T = any> {
+  success: boolean;
+  data?: T;
+  message?: string;
+  error?: {
+    code: string;
+    details?: any;
+  };
+}
+
+export interface WishlistItem {
+  id: string;
+  category: CategoryType;
+}
+
+export interface SearchResultItem extends CatalogItem {}
+
+export interface SearchPagination {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface SearchResponseData {
+  results: SearchResultItem[];
+  pagination: SearchPagination;
+}
+
+export interface SearchFilters {
+  q?: string;
+  category?: string;
+  city?: string;
+  minPrice?: number;
+  maxPrice?: number;
+  minRating?: number;
+  date?: string;
+  sort?: 'relevance' | 'price_low' | 'price_high' | 'rating' | 'newest';
+  page?: number;
+  limit?: number;
+}
+
+

@@ -28,4 +28,6 @@ const AttractionSchema = new Schema<IAttraction>({
   isTrending: { type: Boolean, default: false }
 });
 
+AttractionSchema.index({ title: 1, city: 1, entryPrice: 1, rating: -1 });
+
 export const AttractionModel: Model<IAttraction> = (mongoose.models.Attraction || mongoose.model<IAttraction>('Attraction', AttractionSchema)) as any;

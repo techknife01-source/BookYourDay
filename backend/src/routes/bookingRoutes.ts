@@ -4,8 +4,12 @@ import { authenticate } from '../middleware/authMiddleware.js';
 
 const router = Router();
 
-router.post('/', authenticate, BookingController.createBooking);
-router.get('/', authenticate, BookingController.getUserBookings);
-router.post('/:id/cancel', authenticate, BookingController.cancelBooking);
+router.use(authenticate);
+
+router.post('/', BookingController.createBooking);
+router.get('/', BookingController.getUserBookings);
+router.get('/my', BookingController.getUserBookings);
+router.get('/:id', BookingController.getBookingById);
+router.post('/:id/cancel', BookingController.cancelBooking);
 
 export default router;

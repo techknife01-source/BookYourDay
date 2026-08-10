@@ -1,15 +1,54 @@
-import React, { useState } from 'react';
-import { MOCK_MOVIES } from '../data/mockData';
+import React, { useEffect, useState } from 'react';
+import { catalogApi } from '../api/catalogApi';
 import { MovieCard } from '../components/cards/MovieCard';
-import { Film, Filter } from 'lucide-react';
+import { Film, Filter, Loader2 } from 'lucide-react';
+import { Movie } from '../types';
 
 export const MoviesPage: React.FC = () => {
+  const [movies, setMovies] = useState<Movie[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
   const [activeTab, setActiveTab] = useState<'showing' | 'coming' | 'popular'>('showing');
   const [selectedLanguage, setSelectedLanguage] = useState<string>('all');
   const [selectedGenre, setSelectedGenre] = useState<string>('all');
   const [selectedFormat, setSelectedFormat] = useState<string>('all');
 
-  const filteredMovies = MOCK_MOVIES.filter((m) => {
+  useEffect(() => {
+    let mounted = true;
+    async function fetchMovies() {
+      setLoading(true);
+      try {
+        const items = await catalogApi.getByCategory('movies');
+        if (!mounted) return;
+        const movList: Movie[] = items.map((item) => ({
+          id: item.id,
+          title: item.title,
+          poster: item.image,
+          backdrop: item.backdrop || item.image,
+          rating: item.rating || 4.8,
+          votesCount: item.reviewCount || 12000,
+          genre: item.metadata?.genre || ['Action', 'Drama'],
+          language: item.metadata?.language || ['English', 'Hindi'],
+          duration: item.metadata?.duration || '2h 15m',
+          releaseDate: item.metadata?.releaseDate || '2026',
+          format: item.metadata?.format || ['2D', '3D', 'IMAX 3D'],
+          description: item.description,
+          cast: item.metadata?.cast || [{ name: 'Lead Actor', role: 'Main', avatar: '' }],
+          director: item.metadata?.director || 'Director',
+          isTrending: item.metadata?.isTrending
+        }));
+        setMovies(movList);
+      } catch (err) {
+        console.error('Movies load error:', err);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    }
+
+    fetchMovies();
+    return () => { mounted = false; };
+  }, []);
+
+  const filteredMovies = movies.filter((m) => {
     if (selectedLanguage !== 'all' && !m.language.includes(selectedLanguage)) return false;
     if (selectedGenre !== 'all' && !m.genre.includes(selectedGenre)) return false;
     if (selectedFormat !== 'all' && !m.format.includes(selectedFormat)) return false;
@@ -96,12 +135,24 @@ export const MoviesPage: React.FC = () => {
         </select>
       </div>
 
-      {/* Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        {filteredMovies.map((movie) => (
-          <MovieCard key={movie.id} movie={movie} />
-        ))}
-      </div>
+      {/* Loading state */}
+      {loading ? (
+        <div className="flex flex-col items-center justify-center py-16 text-slate-400 gap-3">
+          <Loader2 className="w-8 h-8 text-rose-500 animate-spin" />
+          <span className="text-xs font-bold uppercase tracking-wider">Loading Movies from Database...</span>
+        </div>
+      ) : filteredMovies.length === 0 ? (
+        <div className="p-12 text-center bg-slate-900/40 border border-slate-800 rounded-3xl space-y-2">
+          <h3 className="text-lg font-bold text-white">No Movies Found</h3>
+          <p className="text-xs text-slate-400">Try adjusting your language, genre or format filters.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          {filteredMovies.map((movie) => (
+            <MovieCard key={movie.id} movie={movie} />
+          ))}
+        </div>
+      )}
     </div>
   );
 };

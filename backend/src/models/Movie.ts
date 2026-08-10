@@ -34,4 +34,7 @@ const MovieSchema = new Schema<IMovie>({
   isTrending: { type: Boolean, default: false }
 });
 
+MovieSchema.index({ title: 1, rating: -1 });
+MovieSchema.index({ genre: 1 });
+
 export const MovieModel: Model<IMovie> = (mongoose.models.Movie || mongoose.model<IMovie>('Movie', MovieSchema)) as any;

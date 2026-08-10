@@ -26,4 +26,6 @@ const RestaurantSchema = new Schema<IRestaurant>({
   createdAt: { type: Date, default: Date.now }
 });
 
+RestaurantSchema.index({ name: 1, city: 1, costForTwo: 1, rating: -1 });
+
 export const RestaurantModel: Model<IRestaurant> = (mongoose.models.Restaurant || mongoose.model<IRestaurant>('Restaurant', RestaurantSchema)) as any;

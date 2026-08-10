@@ -34,4 +34,6 @@ const EventSchema = new Schema<IEvent>({
   isTrending: { type: Boolean, default: false }
 });
 
+EventSchema.index({ title: 1, city: 1, startingPrice: 1, rating: -1 });
+
 export const EventModel: Model<IEvent> = (mongoose.models.Event || mongoose.model<IEvent>('Event', EventSchema)) as any;

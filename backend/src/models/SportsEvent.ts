@@ -36,4 +36,6 @@ const SportsEventSchema = new Schema<ISportsEvent>({
   isTrending: { type: Boolean, default: false }
 });
 
+SportsEventSchema.index({ title: 1, city: 1, startingPrice: 1, rating: -1 });
+
 export const SportsEventModel: Model<ISportsEvent> = (mongoose.models.SportsEvent || mongoose.model<ISportsEvent>('SportsEvent', SportsEventSchema)) as any;

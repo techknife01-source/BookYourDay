@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { X, ShieldCheck, Check, CreditCard, Wallet, Smartphone, Building2, Tag, Loader2, Sparkles } from 'lucide-react';
-import { CategoryType, Booking, Seat } from '../../types';
+import { X, ShieldCheck, Check, CreditCard, Wallet, Smartphone, Building2, Tag, Loader2, Sparkles, AlertCircle } from 'lucide-react';
+import { CategoryType, Booking } from '../../types';
 import { PriceBreakdown, calculatePrice } from '../../utils/pricing';
 import { MOCK_OFFERS } from '../../data/mockData';
 import { BookingService } from '../../services/bookingService';
+import { paymentsApi } from '../../api/paymentsApi';
 
 interface CheckoutModalProps {
   isOpen: boolean;
@@ -20,6 +21,20 @@ interface CheckoutModalProps {
   initialPriceBreakdown: PriceBreakdown;
   onBookingSuccess: (booking: Booking) => void;
 }
+
+const loadRazorpayScript = (): Promise<boolean> => {
+  return new Promise((resolve) => {
+    if ((window as any).Razorpay) {
+      resolve(true);
+      return;
+    }
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+};
 
 export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   isOpen,
@@ -48,6 +63,8 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
   const [paymentMethod, setPaymentMethod] = useState<'UPI' | 'CREDIT_CARD' | 'NET_BANKING' | 'WALLET'>('UPI');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [bookingError, setBookingError] = useState('');
 
   if (!isOpen) return null;
 
@@ -63,40 +80,40 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     appliedCoupon?.code
   );
 
-  const handleApplyCoupon = () => {
+  const handleApplyCoupon = async () => {
     setCouponError('');
-    const offer = MOCK_OFFERS.find((o) => o.code.toUpperCase() === couponCode.trim().toUpperCase());
-    if (!offer) {
-      setCouponError('Invalid coupon code.');
-      return;
-    }
+    if (!couponCode.trim()) return;
 
-    let discountAmt = 0;
-    if (offer.flatDiscount) {
-      discountAmt = offer.flatDiscount;
-    } else if (offer.discountPercentage) {
-      discountAmt = Math.min(
-        (currentPrice.baseTotal * offer.discountPercentage) / 100,
-        offer.maxDiscount || 500
+    try {
+      const res = await BookingService.validateCouponAsync(
+        couponCode.trim(),
+        category,
+        currentPrice.baseTotal
       );
+      setAppliedCoupon({ code: res.code, discount: res.discountAmount });
+    } catch (err: any) {
+      const offer = MOCK_OFFERS.find((o) => o.code.toUpperCase() === couponCode.trim().toUpperCase());
+      if (offer) {
+        let discountAmt = offer.flatDiscount || Math.min((currentPrice.baseTotal * (offer.discountPercentage || 0)) / 100, offer.maxDiscount || 500);
+        setAppliedCoupon({ code: offer.code, discount: Math.round(discountAmt) });
+      } else {
+        setCouponError(err?.message || 'Invalid or non-applicable coupon code.');
+      }
     }
-
-    setAppliedCoupon({ code: offer.code, discount: Math.round(discountAmt) });
   };
 
-  const handlePay = () => {
+  const handlePay = async () => {
+    setBookingError('');
     if (!customerName || !customerEmail || !customerPhone) {
-      alert('Please fill in your contact information.');
+      setBookingError('Please fill in your contact information.');
       return;
     }
 
     setIsProcessing(true);
 
-    setTimeout(() => {
-      setIsProcessing(false);
-
-      const createdBooking = BookingService.createBooking({
-        userId: profile.id,
+    try {
+      // Step 1: Create Order on Backend
+      const orderData = await paymentsApi.createPaymentOrder({
         category,
         itemTitle,
         itemImage,
@@ -108,22 +125,77 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           ? `${seatsOrDetails} + Popcorn & Drink Combo`
           : seatsOrDetails,
         quantity,
-        subtotal: currentPrice.baseTotal,
-        convenienceFee: currentPrice.convenienceFee,
-        taxes: currentPrice.taxes,
-        discount: currentPrice.discount,
-        totalAmount: currentPrice.grandTotal,
-        status: 'CONFIRMED',
-        paymentMethod,
-        paymentTransactionId: `TXN_${Math.floor(1000000000 + Math.random() * 9000000000)}`,
+        unitPrice: currentPrice.baseTotal / quantity,
+        couponCode: appliedCoupon?.code,
         customerName,
         customerEmail,
-        customerPhone
+        customerPhone,
+        paymentMethod
       });
 
-      onClose();
-      onBookingSuccess(createdBooking);
-    }, 1200);
+      // Step 2: Ensure Razorpay SDK is loaded
+      const isLoaded = await loadRazorpayScript();
+      if (!isLoaded) {
+        throw new Error('Failed to load Razorpay checkout SDK. Please check your network connection.');
+      }
+
+      // Step 3: Open Razorpay Modal
+      const options = {
+        key: orderData.keyId,
+        amount: orderData.amount, // in paise
+        currency: orderData.currency || 'INR',
+        name: 'Book Your Day',
+        description: `${itemTitle} (${seatsOrDetails})`,
+        image: itemImage || 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=200&auto=format&fit=crop&q=80',
+        order_id: orderData.orderId,
+        prefill: {
+          name: customerName,
+          email: customerEmail,
+          contact: customerPhone
+        },
+        theme: {
+          color: '#e11d48'
+        },
+        handler: async function (response: any) {
+          setIsVerifying(true);
+          try {
+            // Step 4: Verify HMAC Signature on Backend
+            const confirmedBooking = await paymentsApi.verifyPayment({
+              razorpay_order_id: response.razorpay_order_id,
+              razorpay_payment_id: response.razorpay_payment_id,
+              razorpay_signature: response.razorpay_signature,
+              bookingId: orderData.bookingId
+            });
+
+            setIsVerifying(false);
+            setIsProcessing(false);
+            onClose();
+            onBookingSuccess(confirmedBooking);
+          } catch (verifyErr: any) {
+            setIsVerifying(false);
+            setIsProcessing(false);
+            setBookingError(verifyErr.message || 'Payment signature verification failed. Please contact support if debited.');
+          }
+        },
+        modal: {
+          ondismiss: function () {
+            setIsProcessing(false);
+            setBookingError('Payment checkout was dismissed by user.');
+          }
+        }
+      };
+
+      const rzp = new (window as any).Razorpay(options);
+      rzp.on('payment.failed', function (response: any) {
+        setIsProcessing(false);
+        setBookingError(response.error?.description || 'Payment execution failed on gateway.');
+      });
+      rzp.open();
+    } catch (err: any) {
+      setIsProcessing(false);
+      const errMsg = err?.response?.data?.message || err?.message || 'Failed to initiate payment.';
+      setBookingError(errMsg);
+    }
   };
 
   return (
@@ -150,6 +222,15 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
         {/* Content Body */}
         <div className="p-6 space-y-6 max-h-[75vh] overflow-y-auto">
+          {bookingError && (
+            <div className="p-4 bg-rose-500/10 border border-rose-500/30 rounded-2xl text-xs font-bold text-rose-400 flex items-center justify-between">
+              <span>{bookingError}</span>
+              <button onClick={() => setBookingError('')} className="text-rose-400 hover:text-white">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+
           {/* Item Summary Card */}
           <div className="p-4 bg-slate-900/60 border border-slate-800 rounded-2xl flex items-center gap-4">
             <img src={itemImage} alt={itemTitle} className="w-16 h-20 object-cover rounded-xl shrink-0" />
@@ -334,13 +415,18 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
 
           <button
             onClick={handlePay}
-            disabled={isProcessing}
-            className="py-3.5 px-8 bg-rose-600 hover:bg-rose-500 text-white font-black text-sm rounded-xl transition-all shadow-xl shadow-rose-900/40 flex items-center gap-2"
+            disabled={isProcessing || isVerifying}
+            className="py-3.5 px-8 bg-rose-600 hover:bg-rose-500 disabled:bg-slate-800 disabled:text-slate-500 text-white font-black text-sm rounded-xl transition-all shadow-xl shadow-rose-900/40 flex items-center gap-2"
           >
-            {isProcessing ? (
+            {isVerifying ? (
               <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Processing Payment...</span>
+                <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
+                <span>Verifying Signature...</span>
+              </>
+            ) : isProcessing ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin text-rose-400" />
+                <span>Opening Gateway...</span>
               </>
             ) : (
               <span>Pay ₹{currentPrice.grandTotal} & Confirm</span>

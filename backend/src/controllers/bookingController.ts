@@ -1,139 +1,428 @@
 import { Request, Response } from 'express';
 import { AuthRequest } from '../middleware/authMiddleware.js';
 import { BookingModel } from '../models/Booking.js';
+import { TicketModel } from '../models/Ticket.js';
+import { ShowModel } from '../models/Show.js';
 import { PricingService } from '../services/pricingService.js';
 import { RefundService } from '../services/refundService.js';
+import { PaymentModel } from '../models/Payment.js';
+import { RazorpayService } from '../services/razorpayService.js';
 
 export class BookingController {
   static async createBooking(req: Request, res: Response) {
     const authReq = req as AuthRequest;
+    const userId = authReq.user?.userId;
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required. Please log in.'
+      });
+    }
+
     const {
-      category,
-      itemTitle,
-      itemImage,
-      venueOrCinema,
-      city,
-      date,
-      time,
-      seatsOrTicketsDetails,
-      quantity,
-      unitPrice,
+      category = 'movies',
+      itemTitle = 'Booked Experience',
+      itemImage = 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=600&auto=format&fit=crop&q=80',
+      venueOrCinema = 'Partner Venue',
+      city = 'Asansol',
+      date = new Date().toISOString().split('T')[0],
+      time = '19:30',
+      seatsOrTicketsDetails = '1 Ticket',
+      quantity = 1,
+      unitPrice = 450,
       couponCode,
-      customerName,
-      customerEmail,
-      customerPhone,
-      paymentMethod
+      customerName = authReq.user?.email?.split('@')[0] || 'User',
+      customerEmail = authReq.user?.email || 'user@example.com',
+      customerPhone = '+1 (555) 000-0000',
+      paymentMethod = 'UPI',
+      showId,
+      selectedSeats = [],
+      idempotencyKey
     } = req.body;
 
-    const pricing = PricingService.calculatePrice({
-      unitPrice: unitPrice || 450,
-      quantity: quantity || 1,
-      couponCode,
-      isMemberPlus: true
+    if (quantity <= 0) {
+      return res.status(422).json({
+        success: false,
+        message: 'Invalid quantity'
+      });
+    }
+
+    // Idempotency check 1: Request idempotency key
+    const effectiveIdempotencyKey = idempotencyKey || req.headers['x-idempotency-key'];
+    if (effectiveIdempotencyKey) {
+      const existingByKey = await (BookingModel as any).findOne({ idempotencyKey: effectiveIdempotencyKey });
+      if (existingByKey) {
+        const obj = existingByKey.toObject ? existingByKey.toObject() : existingByKey;
+        return res.status(200).json({
+          success: true,
+          message: 'Booking retrieved from idempotent request',
+          data: { ...obj, id: obj._id ? obj._id.toString() : obj.id }
+        });
+      }
+    }
+
+    // Idempotency check 2: Recent duplicate check (within 5 seconds)
+    const fiveSecondsAgo = new Date(Date.now() - 5000);
+    const recentDuplicate = await (BookingModel as any).findOne({
+      userId,
+      itemTitle,
+      date,
+      time,
+      quantity,
+      createdAt: { $gte: fiveSecondsAgo }
     });
+    if (recentDuplicate) {
+      const obj = recentDuplicate.toObject ? recentDuplicate.toObject() : recentDuplicate;
+      return res.status(200).json({
+        success: true,
+        message: 'Duplicate request detected within short window',
+        data: { ...obj, id: obj._id ? obj._id.toString() : obj.id }
+      });
+    }
 
-    const bookingNumber = `BYD-${Math.floor(100000 + Math.random() * 900000)}`;
-    const qrCodeData = `${bookingNumber}-${Date.now()}`;
+    let seatsToLock: string[] = Array.isArray(selectedSeats) ? selectedSeats : [];
+    if (seatsToLock.length === 0 && typeof seatsOrTicketsDetails === 'string') {
+      const matches = seatsOrTicketsDetails.match(/\b([A-Z]\d+)\b/g);
+      if (matches && matches.length > 0) {
+        seatsToLock = matches;
+      }
+    }
 
-    const bookingData = {
-      bookingNumber,
-      userId: authReq.user?.userId || 'usr_101',
-      category: category || 'movies',
-      itemTitle: itemTitle || 'Booked Entertainment',
-      itemImage: itemImage || 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=600&auto=format&fit=crop&q=80',
-      venueOrCinema: venueOrCinema || 'Partner Venue',
-      city: city || 'Asansol',
-      date: date || new Date().toISOString().split('T')[0],
-      time: time || '19:30',
-      seatsOrTicketsDetails: seatsOrTicketsDetails || '2 Tickets',
-      quantity: quantity || 2,
-      subtotal: pricing.subtotal,
-      convenienceFee: pricing.convenienceFee,
-      taxes: pricing.taxes,
-      discount: pricing.discount,
-      totalAmount: pricing.totalAmount,
-      status: 'CONFIRMED',
-      paymentMethod: paymentMethod || 'UPI',
-      paymentTransactionId: `TXN${Date.now()}`,
-      qrCodeData,
-      customerName: customerName || 'Alex Mercer',
-      customerEmail: customerEmail || 'alex.mercer@example.com',
-      customerPhone: customerPhone || '+1 (555) 234-5678',
-      createdAt: new Date()
-    };
+    let lockedSeatsInShow = false;
 
     try {
+      // Atomic seat locking if showId and seats exist
+      if (showId && seatsToLock.length > 0) {
+        const showExists = await ShowModel.findById(showId);
+        if (!showExists) {
+          return res.status(404).json({
+            success: false,
+            message: 'Show or venue session not found'
+          });
+        }
+
+        // Atomic conditional update: verify NONE of requested seats are in bookedSeats
+        const updatedShow = await ShowModel.findOneAndUpdate(
+          {
+            _id: showId,
+            bookedSeats: { $nin: seatsToLock }
+          },
+          {
+            $addToSet: { bookedSeats: { $each: seatsToLock } }
+          },
+          { new: true }
+        );
+
+        if (!updatedShow) {
+          return res.status(409).json({
+            success: false,
+            message: 'One or more selected seats are no longer available.',
+            error: { code: 'SEAT_CONFLICT', details: `Seats ${seatsToLock.join(', ')} are already booked` }
+          });
+        }
+
+        lockedSeatsInShow = true;
+      }
+
+      // Authoritative server-side price calculation
+      const pricing = await PricingService.calculatePriceAsync({
+        unitPrice: Number(unitPrice) || 450,
+        quantity: Number(quantity) || 1,
+        couponCode,
+        isMemberPlus: true
+      });
+
+      const bookingNumber = `BYD-${Math.floor(100000 + Math.random() * 900000)}`;
+      const qrCodeData = `https://bookyourday.com/ticket/${bookingNumber}`;
+
+      const bookingData = {
+        bookingNumber,
+        userId,
+        category,
+        itemTitle,
+        itemImage,
+        venueOrCinema,
+        city,
+        date,
+        time,
+        seatsOrTicketsDetails,
+        quantity,
+        subtotal: pricing.subtotal,
+        convenienceFee: pricing.convenienceFee,
+        taxes: pricing.taxes,
+        discount: pricing.discount,
+        totalAmount: pricing.totalAmount,
+        status: 'CONFIRMED' as const,
+        paymentMethod,
+        paymentTransactionId: `TXN${Date.now()}`,
+        qrCodeData,
+        customerName,
+        customerEmail,
+        customerPhone,
+        showId,
+        idempotencyKey: effectiveIdempotencyKey,
+        createdAt: new Date()
+      };
+
       const newBooking = await (BookingModel as any).create(bookingData);
-      return res.status(201).json({ success: true, data: newBooking });
-    } catch {
+      const bookingObj = newBooking.toObject ? newBooking.toObject() : newBooking;
+      const bookingId = bookingObj._id ? bookingObj._id.toString() : bookingObj.id;
+
+      // Digital Ticket Record
+      const ticketData = {
+        bookingId,
+        ticketNumber: `TKT-${bookingNumber}`,
+        userId,
+        itemTitle,
+        venueOrCinema,
+        seatDetails: seatsOrTicketsDetails,
+        qrCode: qrCodeData,
+        validDate: date,
+        validTime: time,
+        status: 'VALID' as const,
+        createdAt: new Date()
+      };
+      await (TicketModel as any).create(ticketData).catch((err: any) => {
+        console.warn('Ticket record creation warning:', err);
+      });
+
       return res.status(201).json({
         success: true,
+        message: 'Booking created successfully',
         data: {
-          id: `bk_${Date.now()}`,
-          ...bookingData,
-          createdAt: bookingData.createdAt.toISOString()
+          ...bookingObj,
+          id: bookingId
         }
+      });
+    } catch (error: any) {
+      // Rollback locked seats if creation failed
+      if (showId && lockedSeatsInShow && seatsToLock.length > 0) {
+        await ShowModel.updateOne(
+          { _id: showId },
+          { $pull: { bookedSeats: { $in: seatsToLock } } }
+        ).catch(console.error);
+      }
+
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to create booking',
+        error: { code: 'BOOKING_CREATE_ERROR', details: error?.message }
       });
     }
   }
 
   static async getUserBookings(req: Request, res: Response) {
     const authReq = req as AuthRequest;
-    const userId = authReq.user?.userId || 'usr_101';
+    const userId = authReq.user?.userId;
+    const email = authReq.user?.email;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required. Please log in.'
+      });
+    }
+
     try {
-      const bookings = await (BookingModel as any).find({ userId }).sort({ createdAt: -1 });
-      return res.json({ success: true, data: bookings });
-    } catch {
+      const queryOr: any[] = [{ userId }];
+      if (email) queryOr.push({ customerEmail: email });
+
+      const bookings = await (BookingModel as any).find({ $or: queryOr }).sort({ createdAt: -1 });
+
+      const formatted = bookings.map((b: any) => {
+        const obj = b.toObject ? b.toObject() : b;
+        return {
+          ...obj,
+          id: obj._id ? obj._id.toString() : obj.id
+        };
+      });
+
+      return res.json({ success: true, data: formatted });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to fetch user bookings',
+        error: { code: 'BOOKING_FETCH_ERROR', details: error?.message }
+      });
+    }
+  }
+
+  static async getBookingById(req: Request, res: Response) {
+    const authReq = req as AuthRequest;
+    const userId = authReq.user?.userId;
+    const email = authReq.user?.email;
+    const userRole = authReq.user?.role;
+    const { id } = req.params;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required. Please log in.'
+      });
+    }
+
+    try {
+      let booking = await (BookingModel as any).findById(id).catch(() => null);
+      if (!booking) {
+        booking = await (BookingModel as any).findOne({ bookingNumber: id }).catch(() => null);
+      }
+
+      if (!booking) {
+        return res.status(404).json({
+          success: false,
+          message: 'Booking not found',
+          error: { code: 'NOT_FOUND', details: `No booking found with ID ${id}` }
+        });
+      }
+
+      const obj = booking.toObject ? booking.toObject() : booking;
+
+      // Access authorization check: must belong to user or user must be admin
+      const isOwner = obj.userId === userId || (email && obj.customerEmail === email);
+      const isAdmin = userRole === 'admin';
+
+      if (!isOwner && !isAdmin) {
+        return res.status(403).json({
+          success: false,
+          message: 'Access denied to this booking'
+        });
+      }
+
       return res.json({
         success: true,
-        data: [
-          {
-            id: 'bk_1001',
-            bookingNumber: 'BYD-984210',
-            userId: 'usr_101',
-            category: 'movies',
-            itemTitle: 'Echoes of Tomorrow',
-            itemImage: 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=600&auto=format&fit=crop&q=80',
-            venueOrCinema: 'Grand Cineplex Dolby Atmos (Auditorium 3)',
-            city: 'Asansol',
-            date: '12 Aug 2026',
-            time: '05:15 PM',
-            seatsOrTicketsDetails: 'Seats E5, E6 (IMAX 3D)',
-            quantity: 2,
-            subtotal: 960,
-            convenienceFee: 40,
-            taxes: 80,
-            discount: 100,
-            totalAmount: 980,
-            status: 'CONFIRMED',
-            paymentMethod: 'UPI',
-            paymentTransactionId: 'TXN_9981245100',
-            qrCodeData: 'BYD-984210-E5E6-ECHOES',
-            createdAt: new Date().toISOString(),
-            customerName: 'Alex Mercer',
-            customerEmail: 'alex.mercer@example.com',
-            customerPhone: '+1 (555) 234-5678'
-          }
-        ]
+        data: {
+          ...obj,
+          id: obj._id ? obj._id.toString() : obj.id
+        }
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to fetch booking',
+        error: { code: 'BOOKING_FETCH_ERROR', details: error?.message }
       });
     }
   }
 
   static async cancelBooking(req: Request, res: Response) {
+    const authReq = req as AuthRequest;
+    const userId = authReq.user?.userId;
+    const email = authReq.user?.email;
+    const userRole = authReq.user?.role;
     const { id } = req.params;
-    try {
-      const booking = await (BookingModel as any).findById(id);
-      if (booking) {
-        const refundInfo = RefundService.calculateRefund(booking.totalAmount, booking.date, booking.time);
-        booking.status = 'CANCELLED';
-        await booking.save();
-        return res.json({ success: true, message: refundInfo.message, refundInfo });
-      }
-    } catch {
-      // Fallback
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required. Please log in.'
+      });
     }
 
-    const refundInfo = RefundService.calculateRefund(980, '12 Aug 2026', '05:15 PM');
-    return res.json({ success: true, message: refundInfo.message, refundInfo });
+    try {
+      let booking = await (BookingModel as any).findById(id).catch(() => null);
+      if (!booking) {
+        booking = await (BookingModel as any).findOne({ bookingNumber: id }).catch(() => null);
+      }
+
+      if (!booking) {
+        return res.status(404).json({
+          success: false,
+          message: 'Booking not found',
+          error: { code: 'NOT_FOUND', details: `No booking found with ID ${id}` }
+        });
+      }
+
+      // Authorization check
+      const isOwner = booking.userId === userId || (email && booking.customerEmail === email);
+      const isAdmin = userRole === 'admin';
+
+      if (!isOwner && !isAdmin) {
+        return res.status(403).json({
+          success: false,
+          message: 'Access denied: You cannot cancel another user\'s booking'
+        });
+      }
+
+      if (booking.status === 'CANCELLED') {
+        return res.status(400).json({
+          success: false,
+          message: 'Booking is already cancelled'
+        });
+      }
+
+      const refundInfo = RefundService.calculateRefund(booking.totalAmount, booking.date, booking.time);
+      booking.status = refundInfo.refundAmount > 0 ? 'REFUNDED' : 'CANCELLED';
+      await booking.save();
+
+      // Trigger Razorpay refund if valid payment exists and refund amount > 0
+      let refundStatus = 'NONE';
+      try {
+        const payment = await (PaymentModel as any).findOne({
+          bookingId: booking._id,
+          status: 'SUCCESS'
+        });
+
+        if (payment && payment.razorpayPaymentId && refundInfo.refundAmount > 0 && RazorpayService.isConfigured()) {
+          payment.status = 'REFUND_PENDING';
+          await payment.save();
+
+          const refundPaise = Math.round(refundInfo.refundAmount * 100);
+          const razorpayRefund = await RazorpayService.issueRefund(payment.razorpayPaymentId, refundPaise, {
+            bookingId: booking._id.toString(),
+            cancellationReason: 'User initiated cancellation'
+          });
+
+          payment.status = 'REFUNDED';
+          payment.refundId = razorpayRefund.id;
+          payment.updatedAt = new Date();
+          await payment.save();
+          refundStatus = 'REFUNDED';
+        }
+      } catch (refundError: any) {
+        console.error('Razorpay refund processing error:', refundError);
+        refundStatus = 'REFUND_FAILED';
+      }
+
+      // Release booked seats if present
+      if (booking.showId) {
+        let seatsToRelease: string[] = [];
+        if (typeof booking.seatsOrTicketsDetails === 'string') {
+          const matches = booking.seatsOrTicketsDetails.match(/\b([A-Z]\d+)\b/g);
+          if (matches) seatsToRelease = matches;
+        }
+        if (seatsToRelease.length > 0) {
+          await ShowModel.updateOne(
+            { _id: booking.showId },
+            { $pull: { bookedSeats: { $in: seatsToRelease } } }
+          ).catch(console.error);
+        }
+      }
+
+      // Update ticket status
+      const bookingIdStr = booking._id ? booking._id.toString() : booking.id;
+      await TicketModel.updateMany(
+        { $or: [{ bookingId: booking._id }, { bookingId: bookingIdStr }, { bookingId: id }] },
+        { status: 'CANCELLED' }
+      ).catch(err => {
+        console.warn('Ticket status update warning on cancel:', err);
+      });
+
+      return res.json({
+        success: true,
+        message: refundInfo.message,
+        data: {
+          id: bookingIdStr,
+          bookingNumber: booking.bookingNumber,
+          status: booking.status,
+          refundInfo
+        }
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to cancel booking',
+        error: { code: 'BOOKING_CANCEL_ERROR', details: error?.message }
+      });
+    }
   }
 }

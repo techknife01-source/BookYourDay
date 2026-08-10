@@ -6,7 +6,11 @@ export class SeatController {
   static async lockSeats(req: Request, res: Response) {
     const authReq = req as AuthRequest;
     const { showId, seatIds } = req.body;
-    const userId = authReq.user?.userId || 'usr_101';
+    const userId = authReq.user?.userId;
+
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Authentication required.' });
+    }
 
     if (!showId || !seatIds || !Array.isArray(seatIds)) {
       return res.status(400).json({ success: false, message: 'Invalid showId or seatIds array.' });
@@ -29,7 +33,11 @@ export class SeatController {
   static async unlockSeats(req: Request, res: Response) {
     const authReq = req as AuthRequest;
     const { showId, seatIds } = req.body;
-    const userId = authReq.user?.userId || 'usr_101';
+    const userId = authReq.user?.userId;
+
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Authentication required.' });
+    }
 
     await SeatLockService.unlockSeats(showId, seatIds || [], userId);
     return res.json({ success: true, message: 'Seats released.' });

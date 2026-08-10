@@ -1,12 +1,50 @@
-import React, { useState } from 'react';
-import { MOCK_EVENTS } from '../data/mockData';
+import React, { useEffect, useState } from 'react';
+import { catalogApi } from '../api/catalogApi';
 import { EventCard } from '../components/cards/EventCard';
-import { Music, Filter } from 'lucide-react';
+import { Music, Loader2 } from 'lucide-react';
+import { EventItem } from '../types';
 
 export const EventsPage: React.FC = () => {
+  const [events, setEvents] = useState<EventItem[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
 
-  const filteredEvents = MOCK_EVENTS.filter((e) => {
+  useEffect(() => {
+    let mounted = true;
+    async function fetchEvents() {
+      setLoading(true);
+      try {
+        const items = await catalogApi.getByCategory('events');
+        if (!mounted) return;
+        const evtList: EventItem[] = items.map((item) => ({
+          id: item.id,
+          title: item.title,
+          category: item.metadata?.eventCategory || 'Concert',
+          image: item.image,
+          backdrop: item.backdrop || item.image,
+          date: item.metadata?.date || '15 Aug 2026',
+          time: item.metadata?.time || '07:00 PM',
+          venue: item.location || 'City Arena',
+          city: item.city || 'Asansol',
+          startingPrice: item.priceFrom || 499,
+          rating: item.rating || 4.7,
+          organizer: item.metadata?.organizer || 'Live Events',
+          description: item.description,
+          ticketTiers: item.metadata?.ticketTiers || [{ id: 't1', name: 'General Entry', price: item.priceFrom || 499, description: 'Standard Access', availableQuantity: 50 }]
+        }));
+        setEvents(evtList);
+      } catch (err) {
+        console.error('Events fetch error:', err);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    }
+
+    fetchEvents();
+    return () => { mounted = false; };
+  }, []);
+
+  const filteredEvents = events.filter((e) => {
     if (selectedCategory !== 'all' && e.category.toLowerCase() !== selectedCategory.toLowerCase()) {
       return false;
     }
@@ -41,11 +79,23 @@ export const EventsPage: React.FC = () => {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {filteredEvents.map((event) => (
-          <EventCard key={event.id} eventItem={event} />
-        ))}
-      </div>
+      {loading ? (
+        <div className="flex flex-col items-center justify-center py-16 text-slate-400 gap-3">
+          <Loader2 className="w-8 h-8 text-teal-500 animate-spin" />
+          <span className="text-xs font-bold uppercase tracking-wider">Loading Events from Database...</span>
+        </div>
+      ) : filteredEvents.length === 0 ? (
+        <div className="p-12 text-center bg-slate-900/40 border border-slate-800 rounded-3xl space-y-2">
+          <h3 className="text-lg font-bold text-white">No Events Found</h3>
+          <p className="text-xs text-slate-400">Try selecting a different event category.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {filteredEvents.map((event) => (
+            <EventCard key={event.id} eventItem={event} />
+          ))}
+        </div>
+      )}
     </div>
   );
 };

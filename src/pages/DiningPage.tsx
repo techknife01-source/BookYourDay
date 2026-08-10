@@ -1,13 +1,15 @@
-import React, { useState } from 'react';
-import { MOCK_RESTAURANTS } from '../data/mockData';
+import React, { useEffect, useState } from 'react';
+import { catalogApi } from '../api/catalogApi';
 import { RestaurantCard } from '../components/cards/RestaurantCard';
-import { Utensils, Calendar, Users } from 'lucide-react';
+import { Utensils, Loader2 } from 'lucide-react';
 import { CheckoutModal } from '../components/booking/CheckoutModal';
 import { DigitalTicketModal } from '../components/booking/DigitalTicketModal';
 import { Booking, Restaurant } from '../types';
 import { calculatePrice } from '../utils/pricing';
 
 export const DiningPage: React.FC = () => {
+  const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
   const [selectedRest, setSelectedRest] = useState<Restaurant | null>(null);
   const [reservationTime, setReservationTime] = useState('08:00 PM');
   const [guestCount, setGuestCount] = useState(2);
@@ -16,6 +18,41 @@ export const DiningPage: React.FC = () => {
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [completedBooking, setCompletedBooking] = useState<Booking | null>(null);
   const [digitalTicketOpen, setDigitalTicketOpen] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    async function fetchDining() {
+      setLoading(true);
+      try {
+        const items = await catalogApi.getByCategory('dining');
+        if (!mounted) return;
+        const restList: Restaurant[] = items.map((item) => ({
+          id: item.id,
+          name: item.title,
+          cuisine: item.metadata?.cuisine || ['Fine Dining', 'Multi-Cuisine'],
+          image: item.image,
+          rating: item.rating || 4.6,
+          reviewsCount: item.reviewCount || 1200,
+          priceForTwo: item.priceFrom ? item.priceFrom * 2 : 1200,
+          priceRange: '$$$',
+          openingHours: item.metadata?.timings || '11:00 AM - 11:00 PM',
+          description: item.description || 'Exquisite dining experience.',
+          city: item.city || 'Asansol',
+          address: item.location || 'City Center',
+          availableSlots: item.metadata?.availableSlots || ['07:00 PM', '08:00 PM', '09:00 PM'],
+          menuHighlights: item.metadata?.menuHighlights || ['Chef Special']
+        }));
+        setRestaurants(restList);
+      } catch (err) {
+        console.error('Dining load error:', err);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    }
+
+    fetchDining();
+    return () => { mounted = false; };
+  }, []);
 
   // Table reservation cover deposit = ₹150 per guest
   const priceBreakdown = calculatePrice(150, guestCount);
@@ -31,19 +68,31 @@ export const DiningPage: React.FC = () => {
         <p className="text-slate-400 text-sm">Fine dining, rooftop lounges, wood-fired bistros & chef's specials</p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-6">
-        {MOCK_RESTAURANTS.map((r) => (
-          <div key={r.id} className="flex flex-col">
-            <RestaurantCard restaurant={r} />
-            <button
-              onClick={() => setSelectedRest(r)}
-              className="mt-3 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-lg transition-all"
-            >
-              Reserve Table
-            </button>
-          </div>
-        ))}
-      </div>
+      {loading ? (
+        <div className="flex flex-col items-center justify-center py-16 text-slate-400 gap-3">
+          <Loader2 className="w-8 h-8 text-emerald-500 animate-spin" />
+          <span className="text-xs font-bold uppercase tracking-wider">Loading Restaurants from Database...</span>
+        </div>
+      ) : restaurants.length === 0 ? (
+        <div className="p-12 text-center bg-slate-900/40 border border-slate-800 rounded-3xl space-y-2">
+          <h3 className="text-lg font-bold text-white">No Restaurants Found</h3>
+          <p className="text-xs text-slate-400">Check back later for newly added dining venues.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-6">
+          {restaurants.map((r) => (
+            <div key={r.id} className="flex flex-col">
+              <RestaurantCard restaurant={r} />
+              <button
+                onClick={() => setSelectedRest(r)}
+                className="mt-3 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-lg transition-all"
+              >
+                Reserve Table
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Reservation Drawer Modal */}
       {selectedRest && (

@@ -49,17 +49,27 @@ export const DigitalTicketModal: React.FC<DigitalTicketModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-fade-in overflow-y-auto">
       <div className="bg-[#0b1329] border border-slate-800 rounded-3xl w-full max-w-md my-8 overflow-hidden shadow-2xl flex flex-col relative">
-        {/* Header Success Banner */}
-        <div className="bg-gradient-to-r from-rose-600 to-indigo-600 p-6 text-center space-y-2 relative">
+        {/* Header Banner */}
+        <div className={`p-6 text-center space-y-2 relative ${
+          booking.status === 'CANCELLED' 
+            ? 'bg-gradient-to-r from-slate-800 to-rose-950' 
+            : 'bg-gradient-to-r from-rose-600 to-indigo-600'
+        }`}>
           <button
             onClick={onClose}
             className="absolute top-4 right-4 w-8 h-8 rounded-full bg-black/20 hover:bg-black/40 text-white flex items-center justify-center transition-all"
           >
             <X className="w-4 h-4" />
           </button>
-          <CheckCircle2 className="w-12 h-12 text-white mx-auto shadow-xl" />
-          <h2 className="text-xl font-black text-white tracking-tight">Booking Confirmed!</h2>
-          <p className="text-xs text-rose-100 font-semibold">Your digital ticket is ready to enter</p>
+          <CheckCircle2 className={`w-12 h-12 mx-auto shadow-xl ${
+            booking.status === 'CANCELLED' ? 'text-rose-400' : 'text-white'
+          }`} />
+          <h2 className="text-xl font-black text-white tracking-tight">
+            {booking.status === 'CANCELLED' ? 'Booking Cancelled' : 'Booking Confirmed!'}
+          </h2>
+          <p className="text-xs text-rose-100 font-semibold">
+            {booking.status === 'CANCELLED' ? 'This ticket is invalid and cannot be used for entry.' : 'Your digital ticket is ready to enter'}
+          </p>
         </div>
 
         {/* Physical Ticket Body */}
@@ -121,7 +131,9 @@ export const DigitalTicketModal: React.FC<DigitalTicketModalProps> = ({
             </div>
             <div>
               <span className="text-[10px] text-slate-500 font-bold uppercase block">STATUS</span>
-              <span className="font-bold text-emerald-400 block mt-0.5">{booking.status}</span>
+              <span className={`font-bold block mt-0.5 ${
+                booking.status === 'CANCELLED' ? 'text-rose-400' : 'text-emerald-400'
+              }`}>{booking.status}</span>
             </div>
           </div>
 

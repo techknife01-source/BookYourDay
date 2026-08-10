@@ -1,40 +1,18 @@
 import { Booking, CategoryType, NotificationItem, UserProfile } from '../types';
-import { INITIAL_USER_PROFILE, INITIAL_NOTIFICATIONS } from '../data/mockData';
 import { bookingsApi } from '../api/bookingsApi';
+import { userApi } from '../api/userApi';
 
-const BOOKINGS_KEY = 'byd_bookings_v1';
-const WISHLIST_KEY = 'byd_wishlist_v1';
 const CITY_KEY = 'byd_saved_city_v1';
 const NOTIFS_KEY = 'byd_notifs_v1';
-const PROFILE_KEY = 'byd_profile_v1';
 
-const INITIAL_BOOKINGS: Booking[] = [
+const INITIAL_NOTIFICATIONS: NotificationItem[] = [
   {
-    id: 'bk_1001',
-    bookingNumber: 'BYD-984210',
-    userId: 'usr_101',
-    category: 'movies',
-    itemTitle: 'Echoes of Tomorrow',
-    itemImage: 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=600&auto=format&fit=crop&q=80',
-    venueOrCinema: 'Grand Cineplex Dolby Atmos (Auditorium 3)',
-    city: 'Asansol',
-    date: '12 Aug 2026',
-    time: '05:15 PM',
-    seatsOrTicketsDetails: 'Seats E5, E6 (IMAX 3D)',
-    quantity: 2,
-    subtotal: 960,
-    convenienceFee: 40,
-    taxes: 80,
-    discount: 100,
-    totalAmount: 980,
-    status: 'CONFIRMED',
-    paymentMethod: 'UPI',
-    paymentTransactionId: 'TXN_9981245100',
-    qrCodeData: 'BYD-984210-E5E6-ECHOES',
-    createdAt: '2026-08-09T18:30:00.000Z',
-    customerName: 'Alex Mercer',
-    customerEmail: 'alex.mercer@example.com',
-    customerPhone: '+1 (555) 234-5678'
+    id: 'notif_1',
+    title: 'Welcome to Book Your Day! 🎉',
+    message: 'Explore movies, live events, sports, dining and attractions across cities.',
+    timestamp: '2 hours ago',
+    type: 'system',
+    isRead: false
   }
 ];
 
@@ -48,146 +26,126 @@ export class BookingService {
     localStorage.setItem(CITY_KEY, city);
   }
 
-  static getBookings(): Booking[] {
-    const saved = localStorage.getItem(BOOKINGS_KEY);
-    if (!saved) {
-      localStorage.setItem(BOOKINGS_KEY, JSON.stringify(INITIAL_BOOKINGS));
-      return INITIAL_BOOKINGS;
-    }
-    try {
-      return JSON.parse(saved);
-    } catch {
-      return INITIAL_BOOKINGS;
-    }
-  }
-
+  // Bookings - Direct backend interaction
   static async getBookingsAsync(): Promise<Booking[]> {
     try {
-      const serverBookings = await bookingsApi.getUserBookings();
-      if (Array.isArray(serverBookings) && serverBookings.length > 0) {
-        localStorage.setItem(BOOKINGS_KEY, JSON.stringify(serverBookings));
-        return serverBookings;
-      }
+      return await bookingsApi.getUserBookings();
     } catch (err) {
-      console.warn('Could not fetch bookings from backend, returning cached bookings', err);
+      console.warn('Backend bookings fetch error:', err);
+      return [];
     }
-    return this.getBookings();
   }
 
-  static createBooking(bookingData: Omit<Booking, 'id' | 'bookingNumber' | 'createdAt' | 'qrCodeData'>): Booking {
-    const bookings = this.getBookings();
-    const newId = `bk_${Date.now()}`;
-    const randomNumber = Math.floor(100000 + Math.random() * 900000);
-    const bookingNumber = `BYD-${randomNumber}`;
-    const qrCodeData = `${bookingNumber}-${bookingData.category.toUpperCase()}-${Date.now()}`;
+  static async getBookingByIdAsync(bookingId: string): Promise<Booking | null> {
+    try {
+      return await bookingsApi.getBookingById(bookingId);
+    } catch (err) {
+      console.warn('Backend get booking by id error:', err);
+      return null;
+    }
+  }
 
-    const newBooking: Booking = {
-      ...bookingData,
-      id: newId,
-      bookingNumber,
-      qrCodeData,
-      createdAt: new Date().toISOString()
-    };
+  static async validateCouponAsync(code: string, category?: string, bookingAmount?: number) {
+    return await bookingsApi.validateCoupon(code, category, bookingAmount);
+  }
 
-    bookings.unshift(newBooking);
-    localStorage.setItem(BOOKINGS_KEY, JSON.stringify(bookings));
-
-    // Fire asynchronous background API call to backend Render service
-    bookingsApi.createBooking(newBooking).catch(err => {
-      console.warn('Async backend booking call error:', err);
-    });
-
+  static async createBookingAsync(bookingData: Omit<Booking, 'id' | 'bookingNumber' | 'createdAt' | 'qrCodeData'>): Promise<Booking> {
+    const created = await bookingsApi.createBooking(bookingData as any);
     this.addNotification({
       id: `n_${Date.now()}`,
       title: 'Booking Confirmed! 🎉',
-      message: `Your booking for ${newBooking.itemTitle} (#${newBooking.bookingNumber}) is confirmed.`,
+      message: `Your booking for ${created.itemTitle} (#${created.bookingNumber}) is confirmed.`,
       timestamp: 'Just now',
       type: 'booking',
       isRead: false
     });
-
-    return newBooking;
+    return created;
   }
 
   static async cancelBookingAsync(bookingId: string): Promise<boolean> {
     try {
       await bookingsApi.cancelBooking(bookingId);
-    } catch (err) {
-      console.warn('Backend cancel booking error:', err);
-    }
-    return this.cancelBooking(bookingId);
-  }
-
-  static cancelBooking(bookingId: string): boolean {
-    const bookings = this.getBookings();
-    const index = bookings.findIndex((b) => b.id === bookingId);
-    if (index !== -1) {
-      bookings[index].status = 'CANCELLED';
-      localStorage.setItem(BOOKINGS_KEY, JSON.stringify(bookings));
-
-      // Asynchronously notify backend
-      bookingsApi.cancelBooking(bookingId).catch(err => console.warn('Backend cancel sync error:', err));
-
       this.addNotification({
         id: `n_${Date.now()}`,
         title: 'Booking Cancelled',
-        message: `Booking #${bookings[index].bookingNumber} was cancelled. Refund of ₹${bookings[index].totalAmount} initiated.`,
+        message: `Booking #${bookingId} was cancelled. Refund initiated.`,
         timestamp: 'Just now',
         type: 'booking',
         isRead: false
       });
       return true;
+    } catch (err) {
+      console.warn('Backend cancel booking error:', err);
+      return false;
     }
-    return false;
   }
 
   static transferTicket(bookingId: string, recipientContact: string): boolean {
-    const bookings = this.getBookings();
-    const booking = bookings.find((b) => b.id === bookingId);
-    if (booking) {
-      this.addNotification({
-        id: `n_${Date.now()}`,
-        title: 'Ticket Transferred',
-        message: `Ticket #${booking.bookingNumber} (${booking.itemTitle}) transferred to ${recipientContact}.`,
-        timestamp: 'Just now',
-        type: 'booking',
-        isRead: false
-      });
-      return true;
-    }
-    return false;
+    this.addNotification({
+      id: `n_${Date.now()}`,
+      title: 'Ticket Transferred',
+      message: `Ticket #${bookingId} transferred to ${recipientContact}.`,
+      timestamp: 'Just now',
+      type: 'booking',
+      isRead: false
+    });
+    return true;
   }
 
-  // Wishlist state
-  static getWishlist(): { id: string; category: CategoryType }[] {
-    const saved = localStorage.getItem(WISHLIST_KEY);
-    if (!saved) return [];
+  // Wishlist - Backend API authoritative store
+  static async getWishlistAsync(): Promise<{ id: string; category: CategoryType }[]> {
     try {
-      return JSON.parse(saved);
-    } catch {
+      const wishlistRaw = await userApi.getWishlist();
+      return wishlistRaw.map((entry) => {
+        if (entry.includes(':')) {
+          const [id, category] = entry.split(':');
+          return { id, category: category.toLowerCase() as CategoryType };
+        }
+        return { id: entry, category: 'movies' as CategoryType };
+      });
+    } catch (err) {
+      console.warn('Backend wishlist fetch error:', err);
       return [];
     }
   }
 
-  static toggleWishlist(id: string, category: CategoryType): boolean {
-    const list = this.getWishlist();
-    const existingIndex = list.findIndex((item) => item.id === id);
-    let added = false;
-    if (existingIndex !== -1) {
-      list.splice(existingIndex, 1);
-    } else {
-      list.push({ id, category });
-      added = true;
+  static async toggleWishlistAsync(id: string, category: CategoryType): Promise<boolean> {
+    try {
+      const current = await this.getWishlistAsync();
+      const exists = current.some(item => item.id === id);
+      if (exists) {
+        await userApi.removeFromWishlist(id);
+        return false;
+      } else {
+        await userApi.addToWishlist(id, category);
+        return true;
+      }
+    } catch (err) {
+      console.warn('Wishlist toggle error:', err);
+      return false;
     }
-    localStorage.setItem(WISHLIST_KEY, JSON.stringify(list));
-    return added;
   }
 
-  static isInWishlist(id: string): boolean {
-    return this.getWishlist().some((item) => item.id === id);
+  // User Profile - Backend API authoritative store
+  static async getUserProfileAsync(): Promise<UserProfile | null> {
+    try {
+      return await userApi.getProfile();
+    } catch (err) {
+      console.warn('Backend user profile fetch error:', err);
+      return null;
+    }
   }
 
-  // Notifications
+  static async updateUserProfileAsync(updates: Partial<UserProfile>): Promise<UserProfile | null> {
+    try {
+      return await userApi.updateProfile(updates);
+    } catch (err) {
+      console.warn('Backend profile update error:', err);
+      return null;
+    }
+  }
+
+  // Notifications - Local session helper
   static getNotifications(): NotificationItem[] {
     const saved = localStorage.getItem(NOTIFS_KEY);
     if (!saved) {
@@ -212,24 +170,45 @@ export class BookingService {
     localStorage.setItem(NOTIFS_KEY, JSON.stringify(notifs));
   }
 
-  // User Profile
-  static getUserProfile(): UserProfile {
-    const saved = localStorage.getItem(PROFILE_KEY);
-    if (!saved) {
-      localStorage.setItem(PROFILE_KEY, JSON.stringify(INITIAL_USER_PROFILE));
-      return INITIAL_USER_PROFILE;
-    }
-    try {
-      return JSON.parse(saved);
-    } catch {
-      return INITIAL_USER_PROFILE;
-    }
+  // Synchronous fallbacks for legacy components
+  static createBooking(bookingData: Omit<Booking, 'id' | 'bookingNumber' | 'createdAt' | 'qrCodeData'>): Booking {
+    const newBooking: Booking = {
+      ...bookingData,
+      id: `bk_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+      bookingNumber: `BYD-${Math.floor(100000 + Math.random() * 900000)}`,
+      createdAt: new Date().toISOString(),
+      qrCodeData: `https://bookyourday.com/ticket/${Date.now()}`
+    };
+    this.createBookingAsync(bookingData).catch(console.error);
+    return newBooking;
   }
 
-  static updateUserProfile(updates: Partial<UserProfile>): UserProfile {
-    const current = this.getUserProfile();
-    const updated = { ...current, ...updates };
-    localStorage.setItem(PROFILE_KEY, JSON.stringify(updated));
-    return updated;
+  static toggleWishlist(id: string, category: CategoryType): boolean {
+    this.toggleWishlistAsync(id, category).catch(console.error);
+    return true;
+  }
+
+  static isInWishlist(id: string, category?: CategoryType): boolean {
+    return false;
+  }
+
+  static getWishlist(): { id: string; category: CategoryType }[] {
+    return [];
+  }
+
+  static getBookings(): Booking[] {
+    return [];
+  }
+
+  static getUserProfile(): UserProfile {
+    return {
+      id: 'usr_101',
+      name: 'Alex Mercer',
+      email: 'alex.mercer@example.com',
+      phone: '+1 (555) 234-5678',
+      walletBalance: 450,
+      isMemberPlus: true,
+      savedCity: this.getSavedCity()
+    };
   }
 }

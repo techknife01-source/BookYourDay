@@ -24,6 +24,7 @@ import { MyTicketsPage } from './pages/MyTicketsPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { AdminDashboard } from './pages/AdminDashboard';
 import { PartnerDashboard } from './pages/PartnerDashboard';
+import { SearchResultsPage } from './pages/SearchResultsPage';
 
 export default function App() {
   const [currentCity, setCurrentCity] = useState('Asansol');
@@ -68,6 +69,7 @@ export default function App() {
             <Route path="/wishlist" element={<WishlistPage />} />
             <Route path="/tickets" element={<MyTicketsPage />} />
             <Route path="/profile" element={<ProfilePage />} />
+            <Route path="/search" element={<SearchResultsPage />} />
             <Route path="/admin" element={<AdminDashboard />} />
             <Route path="/partner" element={<PartnerDashboard />} />
           </Routes>

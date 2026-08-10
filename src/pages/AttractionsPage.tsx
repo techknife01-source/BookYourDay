@@ -1,13 +1,15 @@
-import React, { useState } from 'react';
-import { MOCK_ATTRACTIONS } from '../data/mockData';
+import React, { useEffect, useState } from 'react';
+import { catalogApi } from '../api/catalogApi';
 import { AttractionCard } from '../components/cards/AttractionCard';
-import { Compass, Calendar } from 'lucide-react';
+import { Compass, Loader2 } from 'lucide-react';
 import { CheckoutModal } from '../components/booking/CheckoutModal';
 import { DigitalTicketModal } from '../components/booking/DigitalTicketModal';
 import { Booking, Attraction } from '../types';
 import { calculatePrice } from '../utils/pricing';
 
 export const AttractionsPage: React.FC = () => {
+  const [attractions, setAttractions] = useState<Attraction[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
   const [selectedAttraction, setSelectedAttraction] = useState<Attraction | null>(null);
   const [adultCount, setAdultCount] = useState(2);
   const [childCount, setChildCount] = useState(1);
@@ -16,6 +18,39 @@ export const AttractionsPage: React.FC = () => {
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [completedBooking, setCompletedBooking] = useState<Booking | null>(null);
   const [digitalTicketOpen, setDigitalTicketOpen] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    async function fetchAttractions() {
+      setLoading(true);
+      try {
+        const items = await catalogApi.getByCategory('attractions');
+        if (!mounted) return;
+        const attrList: Attraction[] = items.map((item) => ({
+          id: item.id,
+          title: item.title,
+          category: item.metadata?.attractionCategory || 'Theme Park',
+          image: item.image,
+          city: item.city || 'Asansol',
+          rating: item.rating || 4.7,
+          reviewsCount: item.reviewCount || 3500,
+          adultPrice: item.priceFrom || 899,
+          childPrice: Math.round((item.priceFrom || 899) * 0.6),
+          openingHours: item.metadata?.timings || '10:00 AM - 07:00 PM',
+          description: item.description,
+          highlights: item.metadata?.inclusions || ['Entry Ticket', 'Rides Included']
+        }));
+        setAttractions(attrList);
+      } catch (err) {
+        console.error('Attractions load error:', err);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    }
+
+    fetchAttractions();
+    return () => { mounted = false; };
+  }, []);
 
   const handleOpenBooking = (attraction: Attraction) => {
     setSelectedAttraction(attraction);
@@ -38,19 +73,31 @@ export const AttractionsPage: React.FC = () => {
         <p className="text-slate-400 text-sm">Amusement parks, water slides, aquariums, zoos & museums</p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-        {MOCK_ATTRACTIONS.map((attraction) => (
-          <div key={attraction.id} className="flex flex-col">
-            <AttractionCard attraction={attraction} />
-            <button
-              onClick={() => handleOpenBooking(attraction)}
-              className="mt-3 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs rounded-xl shadow-lg transition-all"
-            >
-              Book Entry Pass
-            </button>
-          </div>
-        ))}
-      </div>
+      {loading ? (
+        <div className="flex flex-col items-center justify-center py-16 text-slate-400 gap-3">
+          <Loader2 className="w-8 h-8 text-cyan-500 animate-spin" />
+          <span className="text-xs font-bold uppercase tracking-wider">Loading Attractions from Database...</span>
+        </div>
+      ) : attractions.length === 0 ? (
+        <div className="p-12 text-center bg-slate-900/40 border border-slate-800 rounded-3xl space-y-2">
+          <h3 className="text-lg font-bold text-white">No Attractions Found</h3>
+          <p className="text-xs text-slate-400">Check back later for newly added amusement parks & landmarks.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {attractions.map((attraction) => (
+            <div key={attraction.id} className="flex flex-col">
+              <AttractionCard attraction={attraction} />
+              <button
+                onClick={() => handleOpenBooking(attraction)}
+                className="mt-3 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs rounded-xl shadow-lg transition-all"
+              >
+                Book Entry Pass
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Booking Drawer Modal for Attractions */}
       {selectedAttraction && (
