@@ -8,6 +8,7 @@ dotenv.config(); // fallback to current CWD .env
 
 const envSchema = z.object({
   MONGODB_URI: z.string().optional().default(''),
+  MONGODB_DNS_SERVERS: z.string().optional().default(''),
   PORT: z.string().default('5000'),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   CLIENT_URL: z.string().default('http://localhost:5173'),
