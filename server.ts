@@ -25,11 +25,11 @@ async function startOrchestratedServer() {
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
-      root: path.resolve(process.cwd(), 'frontend'),
+      root: process.cwd(),
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.resolve(process.cwd(), 'frontend/dist');
+    const distPath = path.resolve(process.cwd(), 'dist');
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));

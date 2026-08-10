@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { getDatabaseStatus } from '../config/database.js';
 import authRoutes from './authRoutes.js';
 import movieRoutes from './movieRoutes.js';
 import eventRoutes from './eventRoutes.js';
@@ -9,9 +10,11 @@ import partnerRoutes from './partnerRoutes.js';
 const router = Router();
 
 router.get('/health', (req, res) => {
+  const dbState = getDatabaseStatus();
   res.json({
-    status: 'ok',
-    app: 'Book Your Day API',
+    success: true,
+    message: 'Book Your Day API is running',
+    database: dbState,
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || 'development'
   });
