@@ -1,3 +1,5 @@
+process.env.IS_ORCHESTRATED = 'true';
+
 import express from 'express';
 import path from 'path';
 import cors from 'cors';

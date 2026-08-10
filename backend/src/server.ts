@@ -20,12 +20,15 @@ export async function createBackendApp() {
   return app;
 }
 
-if (process.env.NODE_ENV !== 'production' && !process.env.IS_ORCHESTRATED) {
+if (!process.env.IS_ORCHESTRATED) {
   createBackendApp().then(async (app) => {
     await connectDB();
-    const port = env.PORT || 3000;
-    app.listen(port, () => {
+    const port = parseInt(process.env.PORT || env.PORT || '5000', 10);
+    app.listen(port, '0.0.0.0', () => {
       console.log(`🚀 Book Your Day Backend API listening on port ${port}`);
     });
+  }).catch((err) => {
+    console.error('Fatal backend startup error:', err);
+    process.exit(1);
   });
 }
