@@ -15,6 +15,8 @@ export interface IMovie extends Document {
   cast: { name: string; role: string; avatar: string }[];
   director: string;
   isTrending?: boolean;
+  partnerId?: string;
+  status?: 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'PUBLISHED' | 'PAUSED';
 }
 
 const MovieSchema = new Schema<IMovie>({
@@ -31,7 +33,9 @@ const MovieSchema = new Schema<IMovie>({
   description: { type: String, required: true },
   cast: [{ name: String, role: String, avatar: String }],
   director: { type: String, required: true },
-  isTrending: { type: Boolean, default: false }
+  isTrending: { type: Boolean, default: false },
+  partnerId: { type: String, index: true },
+  status: { type: String, enum: ['DRAFT', 'SUBMITTED', 'APPROVED', 'PUBLISHED', 'PAUSED'], default: 'PUBLISHED', index: true }
 });
 
 MovieSchema.index({ title: 1, rating: -1 });

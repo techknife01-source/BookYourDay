@@ -10,6 +10,8 @@ export interface IVenue extends Document {
   totalScreens: number;
   latitude?: number;
   longitude?: number;
+  partnerId?: string;
+  status?: 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'PUBLISHED' | 'PAUSED';
   createdAt: Date;
 }
 
@@ -23,6 +25,8 @@ const VenueSchema = new Schema<IVenue>({
   totalScreens: { type: Number, default: 1 },
   latitude: { type: Number },
   longitude: { type: Number },
+  partnerId: { type: String, index: true },
+  status: { type: String, enum: ['DRAFT', 'SUBMITTED', 'APPROVED', 'PUBLISHED', 'PAUSED'], default: 'PUBLISHED', index: true },
   createdAt: { type: Date, default: Date.now }
 });
 

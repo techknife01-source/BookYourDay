@@ -12,6 +12,8 @@ export interface IAttraction extends Document {
   description: string;
   inclusions: string[];
   isTrending?: boolean;
+  partnerId?: string;
+  status?: 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'PUBLISHED' | 'PAUSED';
 }
 
 const AttractionSchema = new Schema<IAttraction>({
@@ -25,7 +27,9 @@ const AttractionSchema = new Schema<IAttraction>({
   rating: { type: Number, default: 4.7 },
   description: { type: String, required: true },
   inclusions: [{ type: String }],
-  isTrending: { type: Boolean, default: false }
+  isTrending: { type: Boolean, default: false },
+  partnerId: { type: String, index: true },
+  status: { type: String, enum: ['DRAFT', 'SUBMITTED', 'APPROVED', 'PUBLISHED', 'PAUSED'], default: 'PUBLISHED', index: true }
 });
 
 AttractionSchema.index({ title: 1, city: 1, entryPrice: 1, rating: -1 });

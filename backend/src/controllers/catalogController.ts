@@ -281,34 +281,35 @@ export class CatalogController {
       const items: CatalogItem[] = [];
 
       const queryCity = city ? { city: new RegExp(String(city), 'i') } : {};
+      const publishedFilter = { $or: [{ partnerId: { $exists: false } }, { partnerId: null }, { status: 'PUBLISHED' }] };
 
       if (!category || category === 'movie' || category === 'movies' || category === 'MOVIE') {
-        const movies = await (MovieModel as any).find(trending ? { isTrending: true } : {}).catch(() => []);
+        const movies = await (MovieModel as any).find({ ...publishedFilter, ...(trending ? { isTrending: true } : {}) }).catch(() => []);
         movies.forEach((m: any) => items.push(normalizeMovie(m)));
       }
 
       if (!category || category === 'event' || category === 'events' || category === 'EVENT') {
-        const events = await (EventModel as any).find({ ...queryCity, ...(trending ? { isTrending: true } : {}) }).catch(() => []);
+        const events = await (EventModel as any).find({ ...queryCity, ...publishedFilter, ...(trending ? { isTrending: true } : {}) }).catch(() => []);
         events.forEach((e: any) => items.push(normalizeEvent(e)));
       }
 
       if (!category || category === 'sport' || category === 'sports' || category === 'SPORTS') {
-        const sports = await (SportsEventModel as any).find({ ...queryCity, ...(trending ? { isTrending: true } : {}) }).catch(() => []);
+        const sports = await (SportsEventModel as any).find({ ...queryCity, ...publishedFilter, ...(trending ? { isTrending: true } : {}) }).catch(() => []);
         sports.forEach((s: any) => items.push(normalizeSports(s)));
       }
 
       if (!category || category === 'attraction' || category === 'attractions' || category === 'ATTRACTION') {
-        const attr = await (AttractionModel as any).find({ ...queryCity, ...(trending ? { isTrending: true } : {}) }).catch(() => []);
+        const attr = await (AttractionModel as any).find({ ...queryCity, ...publishedFilter, ...(trending ? { isTrending: true } : {}) }).catch(() => []);
         attr.forEach((a: any) => items.push(normalizeAttraction(a)));
       }
 
       if (!category || category === 'restaurant' || category === 'restaurants' || category === 'dining' || category === 'RESTAURANT') {
-        const rest = await (RestaurantModel as any).find(queryCity).catch(() => []);
+        const rest = await (RestaurantModel as any).find({ ...queryCity, ...publishedFilter }).catch(() => []);
         rest.forEach((r: any) => items.push(normalizeRestaurant(r)));
       }
 
       if (!category || category === 'experience' || category === 'experiences' || category === 'EXPERIENCE') {
-        const exp = await (ExperienceModel as any).find({ ...queryCity, ...(trending ? { isPopular: true } : {}) }).catch(() => []);
+        const exp = await (ExperienceModel as any).find({ ...queryCity, ...publishedFilter, ...(trending ? { isPopular: true } : {}) }).catch(() => []);
         exp.forEach((x: any) => items.push(normalizeExperience(x)));
       }
 

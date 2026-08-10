@@ -1,17 +1,12 @@
 import { Request, Response } from 'express';
 import { AuthRequest } from '../middleware/authMiddleware.js';
 import { BookingModel } from '../models/Booking.js';
-import { PaymentModel } from '../models/Payment.ts';
+import { PaymentModel } from '../models/Payment.js';
 import { TicketModel } from '../models/Ticket.js';
 import { ShowModel } from '../models/Show.js';
+import { WebhookEventModel } from '../models/WebhookEvent.js';
 import { PricingService } from '../services/pricingService.js';
 import { RazorpayService } from '../services/razorpayService.js';
-import { getDatabaseStatus } from '../config/database.js';
-
-// In-memory fallback stores for local development without active MongoDB
-const inMemoryBookings = new Map<string, any>();
-const inMemoryPayments = new Map<string, any>();
-const processedWebhookEvents = new Set<string>();
 
 export class PaymentController {
   /**
@@ -63,15 +58,10 @@ export class PaymentController {
 
     try {
       let booking: any = null;
-      const isDbConnected = getDatabaseStatus() === 'connected';
 
       // Case 1: Existing booking passed
       if (bookingId) {
-        if (isDbConnected) {
-          booking = await (BookingModel as any).findById(bookingId).catch(() => null);
-        } else {
-          booking = inMemoryBookings.get(bookingId);
-        }
+        booking = await (BookingModel as any).findById(bookingId).catch(() => null);
 
         if (!booking) {
           return res.status(404).json({ success: false, message: 'Booking not found' });
@@ -82,7 +72,7 @@ export class PaymentController {
       } else {
         // Case 2: Create new pending booking
         const effectiveIdempotencyKey = idempotencyKey || req.headers['x-idempotency-key'];
-        if (effectiveIdempotencyKey && isDbConnected) {
+        if (effectiveIdempotencyKey) {
           booking = await (BookingModel as any).findOne({ idempotencyKey: effectiveIdempotencyKey }).catch(() => null);
         }
 
@@ -93,7 +83,7 @@ export class PaymentController {
             if (matches && matches.length > 0) seatsToLock = matches;
           }
 
-          if (isDbConnected && showId && seatsToLock.length > 0) {
+          if (showId && seatsToLock.length > 0) {
             const updatedShow = await ShowModel.findOneAndUpdate(
               { _id: showId, bookedSeats: { $nin: seatsToLock } },
               { $addToSet: { bookedSeats: { $each: seatsToLock } } },
@@ -119,11 +109,8 @@ export class PaymentController {
           const bookingNumber = `BYD-${Math.floor(100000 + Math.random() * 900000)}`;
           const qrCodeData = `https://bookyourday.com/ticket/${bookingNumber}`;
           const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
-          const generatedId = `bk_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
 
-          const newBookingData = {
-            _id: generatedId,
-            id: generatedId,
+          booking = await (BookingModel as any).create({
             bookingNumber,
             userId,
             category,
@@ -150,38 +137,18 @@ export class PaymentController {
             showId,
             idempotencyKey: effectiveIdempotencyKey,
             expiresAt,
-            createdAt: new Date(),
-            save: async function() { inMemoryBookings.set(this._id.toString(), this); return this; },
-            toObject: function() { return { ...this }; }
-          };
-
-          if (isDbConnected) {
-            delete (newBookingData as any)._id;
-            delete (newBookingData as any).id;
-            delete (newBookingData as any).save;
-            delete (newBookingData as any).toObject;
-            booking = await (BookingModel as any).create(newBookingData);
-          } else {
-            booking = newBookingData;
-            inMemoryBookings.set(generatedId, booking);
-          }
+            createdAt: new Date()
+          });
         }
       }
 
-      const bookingIdStr = booking._id ? booking._id.toString() : booking.id;
+      const bookingIdStr = booking._id.toString();
 
       // Check if existing order for this booking can be reused (Idempotency)
-      let existingPayment: any = null;
-      if (isDbConnected) {
-        existingPayment = await (PaymentModel as any).findOne({
-          bookingId: booking._id,
-          status: 'PENDING'
-        }).catch(() => null);
-      } else {
-        existingPayment = Array.from(inMemoryPayments.values()).find(
-          (p) => p.bookingId === bookingIdStr && p.status === 'PENDING'
-        );
-      }
+      let existingPayment = await (PaymentModel as any).findOne({
+        bookingId: booking._id,
+        status: 'PENDING'
+      }).catch(() => null);
 
       let orderId = existingPayment?.razorpayOrderId;
       const totalAmount = booking.totalAmount;
@@ -200,10 +167,9 @@ export class PaymentController {
         );
         orderId = order.id;
 
-        const paymentData = {
-          _id: `pay_${Date.now()}`,
+        await (PaymentModel as any).create({
           transactionId: `TXN_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
-          bookingId: booking._id || bookingIdStr,
+          bookingId: booking._id,
           userId,
           razorpayOrderId: orderId,
           amount: totalAmount,
@@ -212,21 +178,12 @@ export class PaymentController {
           status: 'PENDING',
           createdAt: new Date(),
           updatedAt: new Date()
-        };
-
-        if (isDbConnected) {
-          delete (paymentData as any)._id;
-          await (PaymentModel as any).create(paymentData);
-        } else {
-          inMemoryPayments.set(orderId, paymentData);
-        }
+        });
       }
 
       // Save razorpayOrderId to booking
       booking.razorpayOrderId = orderId;
-      if (booking.save) {
-        await booking.save();
-      }
+      await booking.save();
 
       return res.status(200).json({
         success: true,
@@ -277,32 +234,17 @@ export class PaymentController {
     }
 
     try {
-      const isDbConnected = getDatabaseStatus() === 'connected';
-      let booking: any = null;
-      let payment: any = null;
-
-      if (isDbConnected) {
-        booking = await (BookingModel as any).findOne({
-          $or: [{ razorpayOrderId: razorpay_order_id }, { _id: bookingId }]
-        }).catch(() => null);
-
-        if (booking) {
-          payment = await (PaymentModel as any).findOne({
-            $or: [{ razorpayOrderId: razorpay_order_id }, { bookingId: booking._id }]
-          }).catch(() => null);
-        }
-      } else {
-        booking = inMemoryBookings.get(bookingId) || Array.from(inMemoryBookings.values()).find(
-          (b) => b.razorpayOrderId === razorpay_order_id
-        );
-        if (booking) {
-          payment = inMemoryPayments.get(razorpay_order_id);
-        }
-      }
+      let booking = await (BookingModel as any).findOne({
+        $or: [{ razorpayOrderId: razorpay_order_id }, { _id: bookingId }]
+      }).catch(() => null);
 
       if (!booking) {
         return res.status(404).json({ success: false, message: 'Booking not found for this order' });
       }
+
+      let payment = await (PaymentModel as any).findOne({
+        $or: [{ razorpayOrderId: razorpay_order_id }, { bookingId: booking._id }]
+      }).catch(() => null);
 
       // Ensure order_id used for verification strictly comes from server-stored booking
       const serverStoredOrderId = booking.razorpayOrderId;
@@ -322,7 +264,7 @@ export class PaymentController {
           payment.status = 'FAILED';
           payment.failureReason = 'Signature verification failed';
           payment.updatedAt = new Date();
-          if (payment.save) await payment.save();
+          await payment.save().catch(() => null);
         }
 
         return res.status(400).json({
@@ -334,53 +276,49 @@ export class PaymentController {
 
       // Update Payment Record
       if (!payment) {
-        payment = {
+        payment = new PaymentModel({
           transactionId: `TXN_${razorpay_payment_id}`,
-          bookingId: booking._id || bookingId,
+          bookingId: booking._id,
           userId,
-          razorpayOrderId: razorpay_order_id,
+          razorpayOrderId: serverStoredOrderId,
           amount: booking.totalAmount,
           currency: 'INR',
           status: 'SUCCESS'
-        };
+        });
       }
 
       payment.razorpayPaymentId = razorpay_payment_id;
       payment.razorpaySignature = razorpay_signature;
       payment.status = 'SUCCESS';
       payment.updatedAt = new Date();
-
-      if (isDbConnected) {
-        if (payment.save) await payment.save();
-        else await (PaymentModel as any).create(payment);
-      } else {
-        inMemoryPayments.set(razorpay_order_id, payment);
-      }
+      await payment.save();
 
       // Update Booking Record
       booking.status = 'CONFIRMED';
       booking.paymentTransactionId = razorpay_payment_id;
-      if (booking.save) await booking.save();
+      await booking.save();
 
-      // Create Digital Ticket if not already created
-      const bookingIdStr = booking._id ? booking._id.toString() : booking.id || bookingId;
-      if (isDbConnected) {
-        const existingTicket = await (TicketModel as any).findOne({ bookingId: booking._id }).catch(() => null);
-        if (!existingTicket) {
-          await (TicketModel as any).create({
-            bookingId: booking._id,
-            ticketNumber: `TKT-${booking.bookingNumber}`,
-            userId,
-            itemTitle: booking.itemTitle,
-            venueOrCinema: booking.venueOrCinema,
-            seatDetails: booking.seatsOrTicketsDetails,
-            qrCode: booking.qrCodeData,
-            validDate: booking.date,
-            validTime: booking.time,
-            status: 'VALID',
-            createdAt: new Date()
-          }).catch((err: any) => console.warn('Ticket creation error:', err));
-        }
+      // Create Digital Ticket if not already created (Atomically check existence)
+      const bookingIdStr = booking._id.toString();
+      const existingTicket = await (TicketModel as any).findOne({ bookingId: booking._id }).catch(() => null);
+      if (!existingTicket) {
+        await (TicketModel as any).create({
+          bookingId: booking._id,
+          ticketNumber: `TKT-${booking.bookingNumber}`,
+          userId,
+          itemTitle: booking.itemTitle,
+          venueOrCinema: booking.venueOrCinema,
+          seatDetails: booking.seatsOrTicketsDetails,
+          qrCode: booking.qrCodeData,
+          validDate: booking.date,
+          validTime: booking.time,
+          status: 'VALID',
+          createdAt: new Date()
+        }).catch((err: any) => {
+          if (err.code !== 11000) {
+            console.warn('Ticket creation error:', err);
+          }
+        });
       }
 
       const bookingObj = booking.toObject ? booking.toObject() : booking;
@@ -405,7 +343,7 @@ export class PaymentController {
 
   /**
    * POST /api/payments/webhook
-   * Idempotent webhook handler for Razorpay event notifications
+   * Idempotent webhook handler for Razorpay event notifications backed by WebhookEventModel
    */
   static async handleWebhook(req: Request, res: Response) {
     const signature = req.headers['x-razorpay-signature'] as string;
@@ -429,16 +367,34 @@ export class PaymentController {
         return res.status(400).json({ success: false, message: 'Invalid webhook body payload' });
       }
 
-      // Webhook Idempotency Check
-      if (eventId && processedWebhookEvents.has(eventId)) {
-        console.log(`[Razorpay Webhook] Duplicate event ${eventId} ignored`);
-        return res.status(200).json({ status: 'ok', message: 'Event already processed' });
-      }
+      // Webhook Persistent Idempotency Check
+      let webhookRecord: any = null;
       if (eventId) {
-        processedWebhookEvents.add(eventId);
+        try {
+          webhookRecord = await (WebhookEventModel as any).create({
+            eventId,
+            eventType: event,
+            status: 'RECEIVED'
+          });
+        } catch (dupErr: any) {
+          if (dupErr.code === 11000) {
+            const existing = await (WebhookEventModel as any).findOne({ eventId });
+            if (existing && existing.status === 'PROCESSED') {
+              console.log(`[Razorpay Webhook] Duplicate event ${eventId} already PROCESSED`);
+              return res.status(200).json({ status: 'ok', message: 'Event already processed' });
+            }
+            if (existing && existing.status === 'RECEIVED') {
+              console.log(`[Razorpay Webhook] Concurrent event ${eventId} in progress`);
+              return res.status(200).json({ status: 'ok', message: 'Event processing in progress' });
+            }
+            webhookRecord = existing;
+          } else {
+            console.warn('[Razorpay Webhook] WebhookEvent DB record error:', dupErr?.message);
+          }
+        }
       }
 
-      console.log(`[Razorpay Webhook] Received event: ${event}`);
+      console.log(`[Razorpay Webhook] Received event: ${event} (ID: ${eventId})`);
 
       if (event === 'payment.captured') {
         const entity = payload.payment?.entity;
@@ -469,7 +425,9 @@ export class PaymentController {
                 validTime: booking.time,
                 status: 'VALID',
                 createdAt: new Date()
-              }).catch((err: any) => console.warn('Webhook ticket error:', err));
+              }).catch((err: any) => {
+                if (err.code !== 11000) console.warn('Webhook ticket error:', err);
+              });
             }
           }
 
@@ -515,6 +473,12 @@ export class PaymentController {
         }
       }
 
+      if (webhookRecord) {
+        webhookRecord.status = 'PROCESSED';
+        webhookRecord.processedAt = new Date();
+        await webhookRecord.save().catch(() => null);
+      }
+
       return res.status(200).json({ status: 'ok' });
     } catch (error: any) {
       console.error('Webhook error:', error);
@@ -534,18 +498,11 @@ export class PaymentController {
     }
 
     try {
-      const isDbConnected = getDatabaseStatus() === 'connected';
-      let payments: any[] = [];
-
-      if (isDbConnected) {
-        payments = await (PaymentModel as any)
-          .find({ userId })
-          .populate('bookingId')
-          .sort({ createdAt: -1 })
-          .catch(() => []);
-      } else {
-        payments = Array.from(inMemoryPayments.values()).filter((p) => p.userId === userId);
-      }
+      const payments = await (PaymentModel as any)
+        .find({ userId })
+        .populate('bookingId')
+        .sort({ createdAt: -1 })
+        .catch(() => []);
 
       const formatted = payments.map((p: any) => {
         const obj = p.toObject ? p.toObject() : p;
@@ -593,18 +550,25 @@ export class PaymentController {
 
       let count = 0;
       for (const booking of expiredBookings) {
-        booking.status = 'EXPIRED';
-        await booking.save();
-        count++;
+        // Atomic update ensures only one concurrent worker transitions status and releases seats
+        const updatedBooking = await (BookingModel as any).findOneAndUpdate(
+          { _id: booking._id, status: 'PAYMENT_PENDING', expiresAt: { $lt: now } },
+          { $set: { status: 'EXPIRED' } },
+          { new: true }
+        );
 
-        // Release locked seats
-        if (booking.showId && typeof booking.seatsOrTicketsDetails === 'string') {
-          const matches = booking.seatsOrTicketsDetails.match(/\b([A-Z]\d+)\b/g);
-          if (matches && matches.length > 0) {
-            await ShowModel.updateOne(
-              { _id: booking.showId },
-              { $pull: { bookedSeats: { $in: matches } } }
-            ).catch(console.error);
+        if (updatedBooking) {
+          count++;
+
+          // Release locked seats
+          if (booking.showId && typeof booking.seatsOrTicketsDetails === 'string') {
+            const matches = booking.seatsOrTicketsDetails.match(/\b([A-Z]\d+)\b/g);
+            if (matches && matches.length > 0) {
+              await ShowModel.updateOne(
+                { _id: booking.showId },
+                { $pull: { bookedSeats: { $in: matches } } }
+              ).catch(console.error);
+            }
           }
         }
       }
@@ -619,3 +583,4 @@ export class PaymentController {
     }
   }
 }
+

@@ -11,6 +11,8 @@ export interface IExperience extends Document {
   description: string;
   highlights: string[];
   isPopular?: boolean;
+  partnerId?: string;
+  status?: 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'PUBLISHED' | 'PAUSED';
 }
 
 const ExperienceSchema = new Schema<IExperience>({
@@ -23,7 +25,9 @@ const ExperienceSchema = new Schema<IExperience>({
   rating: { type: Number, default: 4.8 },
   description: { type: String, required: true },
   highlights: [{ type: String }],
-  isPopular: { type: Boolean, default: false }
+  isPopular: { type: Boolean, default: false },
+  partnerId: { type: String, index: true },
+  status: { type: String, enum: ['DRAFT', 'SUBMITTED', 'APPROVED', 'PUBLISHED', 'PAUSED'], default: 'PUBLISHED', index: true }
 });
 
 ExperienceSchema.index({ title: 1, city: 1, pricePerPerson: 1, rating: -1 });

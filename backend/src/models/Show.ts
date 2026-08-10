@@ -12,6 +12,8 @@ export interface IShow extends Document {
   priceCategories: { category: string; price: number }[];
   bookedSeats: string[]; // e.g. ["A1", "A2"]
   lockedSeats: { seatId: string; userId: string; lockedAt: Date }[];
+  partnerId?: string;
+  status?: 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'PUBLISHED' | 'PAUSED';
   createdAt: Date;
 }
 
@@ -27,6 +29,8 @@ const ShowSchema = new Schema<IShow>({
   priceCategories: [{ category: String, price: Number }],
   bookedSeats: [{ type: String }],
   lockedSeats: [{ seatId: String, userId: String, lockedAt: Date }],
+  partnerId: { type: String, index: true },
+  status: { type: String, enum: ['DRAFT', 'SUBMITTED', 'APPROVED', 'PUBLISHED', 'PAUSED'], default: 'PUBLISHED', index: true },
   createdAt: { type: Date, default: Date.now }
 });
 

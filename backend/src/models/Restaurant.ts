@@ -10,6 +10,8 @@ export interface IRestaurant extends Document {
   discountOffer?: string; // e.g. "Flat 20% OFF on Dining"
   rating: number;
   isBookable: boolean;
+  partnerId?: string;
+  status?: 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'PUBLISHED' | 'PAUSED';
   createdAt: Date;
 }
 
@@ -23,6 +25,8 @@ const RestaurantSchema = new Schema<IRestaurant>({
   discountOffer: { type: String },
   rating: { type: Number, default: 4.6 },
   isBookable: { type: Boolean, default: true },
+  partnerId: { type: String, index: true },
+  status: { type: String, enum: ['DRAFT', 'SUBMITTED', 'APPROVED', 'PUBLISHED', 'PAUSED'], default: 'PUBLISHED', index: true },
   createdAt: { type: Date, default: Date.now }
 });
 

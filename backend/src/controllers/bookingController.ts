@@ -343,10 +343,22 @@ export class BookingController {
         });
       }
 
-      if (booking.status === 'CANCELLED') {
+      if (booking.status === 'CANCELLED' || booking.status === 'REFUNDED') {
         return res.status(400).json({
           success: false,
-          message: 'Booking is already cancelled'
+          message: 'Booking is already cancelled or refunded'
+        });
+      }
+
+      const existingRefundPayment = await (PaymentModel as any).findOne({
+        bookingId: booking._id,
+        status: { $in: ['REFUND_PENDING', 'REFUNDED'] }
+      }).catch(() => null);
+
+      if (existingRefundPayment) {
+        return res.status(400).json({
+          success: false,
+          message: 'A refund has already been initiated or processed for this booking'
         });
       }
 

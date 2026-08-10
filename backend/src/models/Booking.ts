@@ -27,6 +27,8 @@ export interface IBooking extends Document {
   customerEmail: string;
   customerPhone: string;
   showId?: string;
+  itemId?: string;
+  partnerId?: string;
   idempotencyKey?: string;
   createdAt: Date;
 }
@@ -58,6 +60,8 @@ const BookingSchema = new Schema<IBooking>({
   customerEmail: { type: String, required: true },
   customerPhone: { type: String, required: true },
   showId: { type: String, index: true },
+  itemId: { type: String, index: true },
+  partnerId: { type: String, index: true },
   idempotencyKey: { type: String, index: true },
   createdAt: { type: Date, default: Date.now }
 });
