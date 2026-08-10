@@ -1,6 +1,7 @@
 {
   "name": "book-your-day-backend",
   "version": "1.0.0",
+  "type": "module",
   "description": "Backend API service for Book Your Day - Ticket booking and reservation platform",
   "main": "src/server.ts",
   "scripts": {

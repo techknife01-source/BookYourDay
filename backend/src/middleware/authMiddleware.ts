@@ -5,7 +5,7 @@ export interface AuthRequest extends Request {
   user?: TokenPayload;
 }
 
-export function authenticate(req: AuthRequest, res: Response, next: NextFunction) {
+export function authenticate(req: Request, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({ success: false, message: 'Authentication required. Missing token.' });
@@ -18,13 +18,14 @@ export function authenticate(req: AuthRequest, res: Response, next: NextFunction
     return res.status(401).json({ success: false, message: 'Invalid or expired authentication token.' });
   }
 
-  req.user = payload;
+  (req as AuthRequest).user = payload;
   next();
 }
 
 export function requireRole(roles: Array<'user' | 'partner' | 'admin'>) {
-  return (req: AuthRequest, res: Response, next: NextFunction) => {
-    if (!req.user || !roles.includes(req.user.role)) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const authReq = req as AuthRequest;
+    if (!authReq.user || !roles.includes(authReq.user.role)) {
       return res.status(403).json({ success: false, message: 'Access forbidden. Insufficient permissions.' });
     }
     next();

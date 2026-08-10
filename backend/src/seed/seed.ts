@@ -150,7 +150,13 @@ export async function runSeed() {
     });
 
     // Create seat records for screen1
-    const seatDocs = [];
+    const seatDocs: Array<{
+      screenId: mongoose.Types.ObjectId;
+      seatNumber: string;
+      rowLabel: string;
+      columnIndex: number;
+      category: 'EXECUTIVE' | 'VIP' | 'RECLINER';
+    }> = [];
     ['A', 'B', 'C'].forEach((rowLabel) => {
       for (let i = 1; i <= 8; i++) {
         seatDocs.push({
