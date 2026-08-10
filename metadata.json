@@ -1,0 +1,6 @@
+{
+  "name": "Book Your Day",
+  "description": "Everything worth booking, in one place. Next-generation ticketing and reservation platform for movies, events, sports, attractions, experiences, and dining.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
