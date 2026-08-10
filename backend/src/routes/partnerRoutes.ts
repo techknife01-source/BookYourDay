@@ -4,7 +4,7 @@ import { authenticate } from '../middleware/authMiddleware.js';
 
 const router = Router();
 
-router.get('/stats', authenticate as any, PartnerController.getDashboard as any);
-router.post('/listings', authenticate as any, PartnerController.createListing as any);
+router.get('/stats', authenticate, PartnerController.getDashboard);
+router.post('/listings', authenticate, PartnerController.createListing);
 
 export default router;

@@ -1,5 +1,6 @@
 import { Booking, CategoryType, NotificationItem, UserProfile } from '../types';
 import { INITIAL_USER_PROFILE, INITIAL_NOTIFICATIONS } from '../data/mockData';
+import { bookingsApi } from '../api/bookingsApi';
 
 const BOOKINGS_KEY = 'byd_bookings_v1';
 const WISHLIST_KEY = 'byd_wishlist_v1';
@@ -7,7 +8,6 @@ const CITY_KEY = 'byd_saved_city_v1';
 const NOTIFS_KEY = 'byd_notifs_v1';
 const PROFILE_KEY = 'byd_profile_v1';
 
-// Pre-seeded default sample booking for instant realistic feedback
 const INITIAL_BOOKINGS: Booking[] = [
   {
     id: 'bk_1001',
@@ -61,6 +61,19 @@ export class BookingService {
     }
   }
 
+  static async getBookingsAsync(): Promise<Booking[]> {
+    try {
+      const serverBookings = await bookingsApi.getUserBookings();
+      if (Array.isArray(serverBookings) && serverBookings.length > 0) {
+        localStorage.setItem(BOOKINGS_KEY, JSON.stringify(serverBookings));
+        return serverBookings;
+      }
+    } catch (err) {
+      console.warn('Could not fetch bookings from backend, returning cached bookings', err);
+    }
+    return this.getBookings();
+  }
+
   static createBooking(bookingData: Omit<Booking, 'id' | 'bookingNumber' | 'createdAt' | 'qrCodeData'>): Booking {
     const bookings = this.getBookings();
     const newId = `bk_${Date.now()}`;
@@ -79,7 +92,11 @@ export class BookingService {
     bookings.unshift(newBooking);
     localStorage.setItem(BOOKINGS_KEY, JSON.stringify(bookings));
 
-    // Also push a confirmation notification
+    // Fire asynchronous background API call to backend Render service
+    bookingsApi.createBooking(newBooking).catch(err => {
+      console.warn('Async backend booking call error:', err);
+    });
+
     this.addNotification({
       id: `n_${Date.now()}`,
       title: 'Booking Confirmed! 🎉',
@@ -92,12 +109,24 @@ export class BookingService {
     return newBooking;
   }
 
+  static async cancelBookingAsync(bookingId: string): Promise<boolean> {
+    try {
+      await bookingsApi.cancelBooking(bookingId);
+    } catch (err) {
+      console.warn('Backend cancel booking error:', err);
+    }
+    return this.cancelBooking(bookingId);
+  }
+
   static cancelBooking(bookingId: string): boolean {
     const bookings = this.getBookings();
     const index = bookings.findIndex((b) => b.id === bookingId);
     if (index !== -1) {
       bookings[index].status = 'CANCELLED';
       localStorage.setItem(BOOKINGS_KEY, JSON.stringify(bookings));
+
+      // Asynchronously notify backend
+      bookingsApi.cancelBooking(bookingId).catch(err => console.warn('Backend cancel sync error:', err));
 
       this.addNotification({
         id: `n_${Date.now()}`,

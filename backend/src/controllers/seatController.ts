@@ -3,9 +3,10 @@ import { AuthRequest } from '../middleware/authMiddleware.js';
 import { SeatLockService } from '../services/seatLockService.js';
 
 export class SeatController {
-  static async lockSeats(req: AuthRequest, res: Response) {
+  static async lockSeats(req: Request, res: Response) {
+    const authReq = req as AuthRequest;
     const { showId, seatIds } = req.body;
-    const userId = req.user?.userId || 'usr_101';
+    const userId = authReq.user?.userId || 'usr_101';
 
     if (!showId || !seatIds || !Array.isArray(seatIds)) {
       return res.status(400).json({ success: false, message: 'Invalid showId or seatIds array.' });
@@ -25,9 +26,10 @@ export class SeatController {
     });
   }
 
-  static async unlockSeats(req: AuthRequest, res: Response) {
+  static async unlockSeats(req: Request, res: Response) {
+    const authReq = req as AuthRequest;
     const { showId, seatIds } = req.body;
-    const userId = req.user?.userId || 'usr_101';
+    const userId = authReq.user?.userId || 'usr_101';
 
     await SeatLockService.unlockSeats(showId, seatIds || [], userId);
     return res.json({ success: true, message: 'Seats released.' });

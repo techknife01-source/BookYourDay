@@ -4,7 +4,7 @@ import { authenticate } from '../middleware/authMiddleware.js';
 
 const router = Router();
 
-router.post('/lock', authenticate as any, SeatController.lockSeats as any);
-router.post('/unlock', authenticate as any, SeatController.unlockSeats as any);
+router.post('/lock', authenticate, SeatController.lockSeats);
+router.post('/unlock', authenticate, SeatController.unlockSeats);
 
 export default router;

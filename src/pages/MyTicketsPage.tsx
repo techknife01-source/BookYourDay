@@ -13,6 +13,14 @@ export const MyTicketsPage: React.FC = () => {
   const [ticketModalOpen, setTicketModalOpen] = useState(false);
   const [transferModalOpen, setTransferModalOpen] = useState(false);
 
+  React.useEffect(() => {
+    BookingService.getBookingsAsync().then((fetched) => {
+      if (fetched && fetched.length > 0) {
+        setBookings(fetched);
+      }
+    });
+  }, []);
+
   const handleOpenTicket = (booking: Booking) => {
     setSelectedBooking(booking);
     setTicketModalOpen(true);

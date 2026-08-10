@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { AuthRequest } from '../middleware/authMiddleware.js';
 
 export class PartnerController {
-  static async getDashboard(req: AuthRequest, res: Response) {
+  static async getDashboard(req: Request, res: Response) {
     return res.json({
       success: true,
       partner: {
@@ -25,7 +25,7 @@ export class PartnerController {
     });
   }
 
-  static async createListing(req: AuthRequest, res: Response) {
+  static async createListing(req: Request, res: Response) {
     const listingData = req.body;
     return res.status(201).json({
       success: true,

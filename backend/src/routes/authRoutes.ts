@@ -5,6 +5,6 @@ import { authenticate } from '../middleware/authMiddleware.js';
 const router = Router();
 
 router.post('/login', AuthController.login);
-router.get('/me', authenticate as any, AuthController.getMe as any);
+router.get('/me', authenticate, AuthController.getMe);
 
 export default router;

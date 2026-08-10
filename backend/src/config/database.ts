@@ -10,10 +10,12 @@ export async function connectDatabase(): Promise<boolean> {
   }
 
   try {
-    const conn = await mongoose.connect(uri, {
+    const options: mongoose.ConnectOptions = {
       dbName: 'book-your-day',
       serverSelectionTimeoutMS: 5000,
-    });
+    };
+
+    const conn = await mongoose.connect(uri, options);
 
     console.log(`✅ [Database] MongoDB Atlas Connected successfully! Host: ${conn.connection.host} | DB: book-your-day`);
     return true;

@@ -1,32 +1,35 @@
-import { Request, Response, NextFunction } from 'express';
+import { Request, Response, NextFunction, RequestHandler } from 'express';
 import { verifyToken, TokenPayload } from '../utils/jwtUtils.js';
 
 export interface AuthRequest extends Request {
   user?: TokenPayload;
 }
 
-export function authenticate(req: Request, res: Response, next: NextFunction) {
+export const authenticate: RequestHandler = (req: Request, res: Response, next: NextFunction) => {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ success: false, message: 'Authentication required. Missing token.' });
+    res.status(401).json({ success: false, message: 'Authentication required. Missing token.' });
+    return;
   }
 
   const token = authHeader.split(' ')[1];
   const payload = verifyToken(token);
 
   if (!payload) {
-    return res.status(401).json({ success: false, message: 'Invalid or expired authentication token.' });
+    res.status(401).json({ success: false, message: 'Invalid or expired authentication token.' });
+    return;
   }
 
   (req as AuthRequest).user = payload;
   next();
-}
+};
 
-export function requireRole(roles: Array<'user' | 'partner' | 'admin'>) {
+export function requireRole(roles: Array<'user' | 'partner' | 'admin'>): RequestHandler {
   return (req: Request, res: Response, next: NextFunction) => {
     const authReq = req as AuthRequest;
     if (!authReq.user || !roles.includes(authReq.user.role)) {
-      return res.status(403).json({ success: false, message: 'Access forbidden. Insufficient permissions.' });
+      res.status(403).json({ success: false, message: 'Access forbidden. Insufficient permissions.' });
+      return;
     }
     next();
   };

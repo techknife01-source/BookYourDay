@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 import { getDatabaseStatus } from '../config/database.js';
 import authRoutes from './authRoutes.js';
 import movieRoutes from './movieRoutes.js';
@@ -9,7 +9,7 @@ import partnerRoutes from './partnerRoutes.js';
 
 const router = Router();
 
-router.get('/health', (req, res) => {
+router.get('/health', (req: Request, res: Response) => {
   const dbState = getDatabaseStatus();
   res.json({
     success: true,

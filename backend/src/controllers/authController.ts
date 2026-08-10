@@ -35,15 +35,16 @@ export class AuthController {
     });
   }
 
-  static async getMe(req: AuthRequest, res: Response) {
+  static async getMe(req: Request, res: Response) {
+    const authReq = req as AuthRequest;
     return res.json({
       success: true,
       user: {
-        id: req.user?.userId || 'usr_101',
+        id: authReq.user?.userId || 'usr_101',
         name: 'Alex Mercer',
-        email: req.user?.email || 'alex.mercer@example.com',
+        email: authReq.user?.email || 'alex.mercer@example.com',
         phone: '+1 (555) 234-5678',
-        role: req.user?.role || 'user',
+        role: authReq.user?.role || 'user',
         walletBalance: 450,
         isMemberPlus: true,
         savedCity: 'Asansol'

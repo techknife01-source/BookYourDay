@@ -1,11 +1,12 @@
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { AuthRequest } from '../middleware/authMiddleware.js';
 import { BookingModel } from '../models/Booking.js';
 import { PricingService } from '../services/pricingService.js';
 import { RefundService } from '../services/refundService.js';
 
 export class BookingController {
-  static async createBooking(req: AuthRequest, res: Response) {
+  static async createBooking(req: Request, res: Response) {
+    const authReq = req as AuthRequest;
     const {
       category,
       itemTitle,
@@ -36,7 +37,7 @@ export class BookingController {
 
     const bookingData = {
       bookingNumber,
-      userId: req.user?.userId || 'usr_101',
+      userId: authReq.user?.userId || 'usr_101',
       category: category || 'movies',
       itemTitle: itemTitle || 'Booked Entertainment',
       itemImage: itemImage || 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=600&auto=format&fit=crop&q=80',
@@ -64,7 +65,7 @@ export class BookingController {
     try {
       const newBooking = await (BookingModel as any).create(bookingData);
       return res.status(201).json({ success: true, data: newBooking });
-    } catch (err) {
+    } catch {
       return res.status(201).json({
         success: true,
         data: {
@@ -76,8 +77,9 @@ export class BookingController {
     }
   }
 
-  static async getUserBookings(req: AuthRequest, res: Response) {
-    const userId = req.user?.userId || 'usr_101';
+  static async getUserBookings(req: Request, res: Response) {
+    const authReq = req as AuthRequest;
+    const userId = authReq.user?.userId || 'usr_101';
     try {
       const bookings = await (BookingModel as any).find({ userId }).sort({ createdAt: -1 });
       return res.json({ success: true, data: bookings });
@@ -117,7 +119,7 @@ export class BookingController {
     }
   }
 
-  static async cancelBooking(req: AuthRequest, res: Response) {
+  static async cancelBooking(req: Request, res: Response) {
     const { id } = req.params;
     try {
       const booking = await (BookingModel as any).findById(id);
