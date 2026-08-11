@@ -15,6 +15,8 @@ router.get('/dashboard', authenticate, PartnerController.getDashboard);
 // Partner listing management
 router.get('/listings', authenticate, PartnerController.getListings);
 router.post('/listings', authenticate, requireRole(['partner', 'admin']), PartnerController.createListing);
+router.put('/listings/:category/:id', authenticate, requireRole(['partner', 'admin']), PartnerController.updateListing);
+router.delete('/listings/:category/:id', authenticate, requireRole(['partner', 'admin']), PartnerController.deleteListing);
 router.patch('/listings/:category/:id/status', authenticate, requireRole(['partner', 'admin']), PartnerController.updateListingStatus);
 
 // Partner bookings & revenue
@@ -24,5 +26,6 @@ router.get('/revenue', authenticate, requireRole(['partner', 'admin']), PartnerC
 // Admin partner management
 router.get('/admin/all', authenticate, requireRole(['admin']), PartnerController.getAllPartners);
 router.patch('/admin/:partnerId/status', authenticate, requireRole(['admin']), PartnerController.updatePartnerStatus);
+router.get('/admin/audit-logs', authenticate, requireRole(['admin']), PartnerController.getAuditLogs);
 
 export default router;

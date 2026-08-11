@@ -5,10 +5,12 @@ import { SportsEventModel } from '../models/SportsEvent.js';
 import { AttractionModel } from '../models/Attraction.js';
 import { RestaurantModel } from '../models/Restaurant.js';
 import { ExperienceModel } from '../models/Experience.js';
+import { HotelModel } from '../models/Hotel.js';
+import { RoomTypeModel } from '../models/RoomType.js';
 
 export interface CatalogItem {
   id: string;
-  category: 'MOVIE' | 'EVENT' | 'SPORTS' | 'ATTRACTION' | 'RESTAURANT' | 'EXPERIENCE';
+  category: 'MOVIE' | 'EVENT' | 'SPORTS' | 'ATTRACTION' | 'RESTAURANT' | 'EXPERIENCE' | 'HOTEL';
   title: string;
   description: string;
   image: string;
@@ -360,24 +362,25 @@ export class CatalogController {
     try {
       const items: CatalogItem[] = [];
       const queryCity = city ? { city: new RegExp(String(city), 'i') } : {};
+      const publishedFilter = { $or: [{ partnerId: { $exists: false } }, { partnerId: null }, { status: 'PUBLISHED' }] };
 
       if (rawCategory === 'movie' || rawCategory === 'movies') {
-        const movies = await (MovieModel as any).find(queryCity).catch(() => []);
+        const movies = await (MovieModel as any).find({ ...queryCity, ...publishedFilter }).catch(() => []);
         movies.forEach((m: any) => items.push(normalizeMovie(m)));
       } else if (rawCategory === 'event' || rawCategory === 'events') {
-        const events = await (EventModel as any).find(queryCity).catch(() => []);
+        const events = await (EventModel as any).find({ ...queryCity, ...publishedFilter }).catch(() => []);
         events.forEach((e: any) => items.push(normalizeEvent(e)));
       } else if (rawCategory === 'sport' || rawCategory === 'sports') {
-        const sports = await (SportsEventModel as any).find(queryCity).catch(() => []);
+        const sports = await (SportsEventModel as any).find({ ...queryCity, ...publishedFilter }).catch(() => []);
         sports.forEach((s: any) => items.push(normalizeSports(s)));
       } else if (rawCategory === 'attraction' || rawCategory === 'attractions' || rawCategory === 'parks') {
-        const attr = await (AttractionModel as any).find(queryCity).catch(() => []);
+        const attr = await (AttractionModel as any).find({ ...queryCity, ...publishedFilter }).catch(() => []);
         attr.forEach((a: any) => items.push(normalizeAttraction(a)));
       } else if (rawCategory === 'restaurant' || rawCategory === 'restaurants' || rawCategory === 'dining') {
-        const rest = await (RestaurantModel as any).find(queryCity).catch(() => []);
+        const rest = await (RestaurantModel as any).find({ ...queryCity, ...publishedFilter }).catch(() => []);
         rest.forEach((r: any) => items.push(normalizeRestaurant(r)));
       } else if (rawCategory === 'experience' || rawCategory === 'experiences' || rawCategory === 'play') {
-        const exp = await (ExperienceModel as any).find(queryCity).catch(() => []);
+        const exp = await (ExperienceModel as any).find({ ...queryCity, ...publishedFilter }).catch(() => []);
         exp.forEach((x: any) => items.push(normalizeExperience(x)));
       }
 
@@ -486,6 +489,18 @@ export class CatalogController {
           error: {
             code: 'NOT_FOUND',
             details: `No item found with ID ${id}`
+          }
+        });
+      }
+
+      // Check customer visibility: if partner item and not PUBLISHED, return 404
+      if (doc.partnerId && doc.status && doc.status !== 'PUBLISHED') {
+        return res.status(404).json({
+          success: false,
+          message: 'Item not available or not published',
+          error: {
+            code: 'NOT_FOUND',
+            details: `Item ${id} is not published`
           }
         });
       }

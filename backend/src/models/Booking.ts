@@ -50,7 +50,7 @@ const BookingSchema = new Schema<IBooking>({
   taxes: { type: Number, required: true },
   discount: { type: Number, default: 0 },
   totalAmount: { type: Number, required: true },
-  status: { type: String, enum: ['CONFIRMED', 'PAYMENT_PENDING', 'CANCELLED', 'REFUNDED', 'EXPIRED'], default: 'PAYMENT_PENDING' },
+  status: { type: String, enum: ['CONFIRMED', 'PAYMENT_PENDING', 'CANCELLED', 'REFUNDED', 'EXPIRED'], default: 'PAYMENT_PENDING', index: true },
   paymentMethod: { type: String, default: 'UPI' },
   paymentTransactionId: { type: String, default: '' },
   razorpayOrderId: { type: String, index: true },
@@ -63,7 +63,7 @@ const BookingSchema = new Schema<IBooking>({
   itemId: { type: String, index: true },
   partnerId: { type: String, index: true },
   idempotencyKey: { type: String, index: true },
-  createdAt: { type: Date, default: Date.now }
+  createdAt: { type: Date, default: Date.now, index: true }
 });
 
 export const BookingModel: Model<IBooking> = (mongoose.models.Booking || mongoose.model<IBooking>('Booking', BookingSchema)) as any;

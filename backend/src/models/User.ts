@@ -6,6 +6,7 @@ export interface IUser extends Document {
   passwordHash?: string;
   phone?: string;
   role: 'user' | 'partner' | 'admin';
+  status: 'ACTIVE' | 'SUSPENDED' | 'DEACTIVATED';
   walletBalance: number;
   isMemberPlus: boolean;
   savedCity: string;
@@ -19,6 +20,7 @@ const UserSchema = new Schema<IUser>({
   passwordHash: { type: String },
   phone: { type: String },
   role: { type: String, enum: ['user', 'partner', 'admin'], default: 'user' },
+  status: { type: String, enum: ['ACTIVE', 'SUSPENDED', 'DEACTIVATED'], default: 'ACTIVE', index: true },
   walletBalance: { type: Number, default: 0 },
   isMemberPlus: { type: Boolean, default: false },
   savedCity: { type: String, default: 'Asansol' },

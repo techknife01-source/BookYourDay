@@ -7,6 +7,8 @@ import { SportsEventModel } from '../models/SportsEvent.js';
 import { AttractionModel } from '../models/Attraction.js';
 import { ExperienceModel } from '../models/Experience.js';
 import { RestaurantModel } from '../models/Restaurant.js';
+import { HotelModel } from '../models/Hotel.js';
+import { RoomTypeModel } from '../models/RoomType.js';
 import { CatalogItem } from './catalogController.js';
 
 function escapeRegex(str: string): string {
@@ -162,6 +164,29 @@ function normalizeRestaurant(r: any): CatalogItem {
   };
 }
 
+function normalizeHotel(h: any, minPrice = 1500): CatalogItem {
+  return {
+    id: h._id ? h._id.toString() : h.id,
+    category: 'HOTEL',
+    title: h.name,
+    description: h.description,
+    image: h.images?.[0] || 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=600&auto=format&fit=crop&q=80',
+    location: h.address,
+    city: h.city,
+    rating: h.rating || 4.8,
+    reviewCount: h.reviewCount || 120,
+    priceFrom: minPrice,
+    currency: 'INR',
+    availability: 'AVAILABLE',
+    metadata: {
+      amenities: h.amenities,
+      cancellationPolicy: h.cancellationPolicy,
+      checkInTime: h.checkInTime,
+      checkOutTime: h.checkOutTime
+    }
+  };
+}
+
 const FALLBACK_ITEMS: CatalogItem[] = [
   {
     id: 'm1',
@@ -293,6 +318,7 @@ export class SearchController {
       const queryAttractions = !rawCategory || rawCategory === 'ALL' || rawCategory === 'ATTRACTION' || rawCategory === 'ATTRACTIONS' || rawCategory === 'PARKS';
       const queryExperiences = !rawCategory || rawCategory === 'ALL' || rawCategory === 'EXPERIENCE' || rawCategory === 'EXPERIENCES' || rawCategory === 'PLAY';
       const queryRestaurants = !rawCategory || rawCategory === 'ALL' || rawCategory === 'RESTAURANT' || rawCategory === 'RESTAURANTS' || rawCategory === 'DINING';
+      const queryHotels = !rawCategory || rawCategory === 'ALL' || rawCategory === 'HOTEL' || rawCategory === 'HOTELS' || rawCategory === 'STAYS';
 
       const resultsPromises: Promise<CatalogItem[]>[] = [];
 
@@ -300,13 +326,15 @@ export class SearchController {
       const regexCity = city ? new RegExp(escapeRegex(city), 'i') : null;
       const regexDate = date ? new RegExp(escapeRegex(date), 'i') : null;
 
+      const publishedFilter = { $or: [{ partnerId: { $exists: false } }, { partnerId: null }, { status: 'PUBLISHED' }] };
+
       // 1. Movie Query
       if (queryMovies) {
         resultsPromises.push((async () => {
           if (minPrice !== undefined && 250 < minPrice) return [];
           if (maxPrice !== undefined && 250 > maxPrice) return [];
 
-          const mQuery: any = {};
+          const mQuery: any = { ...publishedFilter };
           if (regexQ) {
             mQuery.$or = [
               { title: regexQ },
@@ -329,7 +357,7 @@ export class SearchController {
       // 2. Event Query
       if (queryEvents) {
         resultsPromises.push((async () => {
-          const eQuery: any = {};
+          const eQuery: any = { ...publishedFilter };
           if (regexQ) {
             eQuery.$or = [
               { title: regexQ },
@@ -363,7 +391,7 @@ export class SearchController {
       // 3. Sports Query
       if (querySports) {
         resultsPromises.push((async () => {
-          const sQuery: any = {};
+          const sQuery: any = { ...publishedFilter };
           if (regexQ) {
             sQuery.$or = [
               { title: regexQ },
@@ -397,7 +425,7 @@ export class SearchController {
       // 4. Attraction Query
       if (queryAttractions) {
         resultsPromises.push((async () => {
-          const aQuery: any = {};
+          const aQuery: any = { ...publishedFilter };
           if (regexQ) {
             aQuery.$or = [
               { title: regexQ },
@@ -428,7 +456,7 @@ export class SearchController {
       // 5. Experience Query
       if (queryExperiences) {
         resultsPromises.push((async () => {
-          const xQuery: any = {};
+          const xQuery: any = { ...publishedFilter };
           if (regexQ) {
             xQuery.$or = [
               { title: regexQ },
@@ -458,7 +486,7 @@ export class SearchController {
       // 6. Restaurant Query
       if (queryRestaurants) {
         resultsPromises.push((async () => {
-          const rQuery: any = {};
+          const rQuery: any = { ...publishedFilter };
           if (regexQ) {
             rQuery.$or = [
               { name: regexQ },
@@ -482,6 +510,30 @@ export class SearchController {
 
           const docs = await (RestaurantModel as any).find(rQuery).lean().maxTimeMS(5000).catch(() => []);
           return docs.map(normalizeRestaurant);
+        })());
+      }
+
+      // 7. Hotel Query
+      if (queryHotels) {
+        resultsPromises.push((async () => {
+          const hQuery: any = { status: 'PUBLISHED' };
+          if (regexQ) {
+            hQuery.$or = [
+              { name: regexQ },
+              { description: regexQ },
+              { address: regexQ },
+              { city: regexQ }
+            ];
+          }
+          if (regexCity) {
+            hQuery.city = regexCity;
+          }
+          if (minRating !== undefined) {
+            hQuery.rating = { $gte: minRating };
+          }
+
+          const docs = await (HotelModel as any).find(hQuery).lean().maxTimeMS(5000).catch(() => []);
+          return docs.map((h: any) => normalizeHotel(h, 2500));
         })());
       }
 

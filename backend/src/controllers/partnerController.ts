@@ -13,6 +13,9 @@ import { ShowModel } from '../models/Show.js';
 import { VenueModel } from '../models/Venue.js';
 import { BookingModel } from '../models/Booking.js';
 import { PaymentModel } from '../models/Payment.js';
+import { HotelModel } from '../models/Hotel.js';
+import { RoomTypeModel } from '../models/RoomType.js';
+import { RoomInventoryModel } from '../models/RoomInventory.js';
 
 export class PartnerController {
   /**
@@ -41,6 +44,17 @@ export class PartnerController {
       return res.status(400).json({
         success: false,
         message: 'Missing required fields: businessName, businessType, email, city'
+      });
+    }
+
+    const validBusinessTypes = ['Cinema', 'Event', 'Sports', 'Attraction', 'Restaurant', 'Experience', 'Hotel'];
+    const isTypeValid = validBusinessTypes.some(
+      t => t.toLowerCase() === String(businessType).trim().toLowerCase()
+    );
+    if (!isTypeValid) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid businessType. Must be one of: ${validBusinessTypes.join(', ')}`
       });
     }
 
@@ -246,14 +260,15 @@ export class PartnerController {
 
       const partnerIdStr = partner._id.toString();
 
-      const [events, sports, attractions, restaurants, experiences, movies, shows] = await Promise.all([
+      const [events, sports, attractions, restaurants, experiences, movies, shows, hotels] = await Promise.all([
         EventModel.find({ partnerId: partnerIdStr }),
         SportsEventModel.find({ partnerId: partnerIdStr }),
         AttractionModel.find({ partnerId: partnerIdStr }),
         RestaurantModel.find({ partnerId: partnerIdStr }),
         ExperienceModel.find({ partnerId: partnerIdStr }),
         MovieModel.find({ partnerId: partnerIdStr }),
-        ShowModel.find({ partnerId: partnerIdStr })
+        ShowModel.find({ partnerId: partnerIdStr }),
+        HotelModel.find({ partnerId: partnerIdStr })
       ]);
 
       const items = [
@@ -263,7 +278,8 @@ export class PartnerController {
         ...restaurants.map(r => ({ ...r.toObject(), category: 'RESTAURANT', id: r._id.toString() })),
         ...experiences.map(x => ({ ...x.toObject(), category: 'EXPERIENCE', id: x._id.toString() })),
         ...movies.map(m => ({ ...m.toObject(), category: 'MOVIE', id: m._id.toString() })),
-        ...shows.map(s => ({ ...s.toObject(), category: 'SHOW', id: s._id.toString() }))
+        ...shows.map(s => ({ ...s.toObject(), category: 'SHOW', id: s._id.toString() })),
+        ...hotels.map(h => ({ ...h.toObject(), category: 'HOTEL', id: h._id.toString() }))
       ];
 
       return res.json({ success: true, data: items });
@@ -402,6 +418,50 @@ export class PartnerController {
           partnerId: partnerIdStr,
           status
         });
+      } else if (catUpper === 'HOTEL') {
+        createdListing = await HotelModel.create({
+          partnerId: partnerIdStr,
+          name: data.title || data.name || partner.businessName,
+          description: data.description || 'Luxury stay with modern amenities',
+          images: Array.isArray(data.images) && data.images.length ? data.images : [data.image || 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=600'],
+          address: data.address || partner.address || 'Central Road',
+          city: data.city || partner.city,
+          state: data.state || 'West Bengal',
+          country: data.country || 'India',
+          amenities: data.amenities || ['WiFi', 'Air Conditioning', 'Breakfast', '24/7 Service'],
+          checkInTime: data.checkInTime || '14:00',
+          checkOutTime: data.checkOutTime || '11:00',
+          cancellationPolicy: data.cancellationPolicy || 'FREE_CANCELLATION',
+          status
+        });
+
+        // Initialize default room type & inventory
+        const defaultRoom = new RoomTypeModel({
+          hotelId: createdListing._id.toString(),
+          name: 'Executive Deluxe Room',
+          description: 'Comfortable air-conditioned room with king bed.',
+          images: createdListing.images,
+          maxAdults: 2,
+          maxChildren: 1,
+          maxGuests: 3,
+          bedType: '1 King Bed',
+          amenities: ['WiFi', 'TV', 'Air Conditioning'],
+          basePrice: Number(data.price || data.basePrice || 2800),
+          totalRooms: 10,
+          status: 'ACTIVE'
+        });
+        await defaultRoom.save();
+
+        const invDocs = [];
+        for (let i = 1; i <= 10; i++) {
+          invDocs.push({
+            hotelId: createdListing._id.toString(),
+            roomTypeId: defaultRoom._id.toString(),
+            roomNumberOrUnitId: `DLX-10${i}`,
+            status: 'AVAILABLE'
+          });
+        }
+        await RoomInventoryModel.insertMany(invDocs);
       } else {
         return res.status(400).json({ success: false, message: 'Unsupported category' });
       }
@@ -484,6 +544,30 @@ export class PartnerController {
         return res.status(403).json({ success: false, message: 'Unauthorized access to this listing' });
       }
 
+      if (partner.status === 'SUSPENDED') {
+        return res.status(403).json({
+          success: false,
+          message: 'Suspended partner cannot modify or publish active inventory.'
+        });
+      }
+
+      if (status === 'PUBLISHED' && partner.status !== 'APPROVED') {
+        return res.status(403).json({
+          success: false,
+          message: 'Cannot publish listing because partner account is not APPROVED.'
+        });
+      }
+
+      if (authReq.user?.role !== 'admin') {
+        const currentStatus = listing.status || 'DRAFT';
+        if (currentStatus === 'DRAFT' && status === 'PUBLISHED') {
+          return res.status(400).json({
+            success: false,
+            message: 'Invalid lifecycle transition: DRAFT listing cannot be directly PUBLISHED without approval.'
+          });
+        }
+      }
+
       listing.status = status;
       await listing.save();
 
@@ -493,13 +577,149 @@ export class PartnerController {
         action: 'listing_status_update',
         targetId: id,
         targetType: category,
-        details: { newStatus: status },
+        details: { previousStatus: listing.status, newStatus: status },
         timestamp: new Date()
       }).catch(() => null);
 
       return res.json({ success: true, message: `Listing status updated to ${status}`, data: listing });
     } catch (err: any) {
       return res.status(500).json({ success: false, message: 'Failed to update listing status', error: err?.message });
+    }
+  }
+
+  /**
+   * Update full listing content
+   */
+  static async updateListing(req: Request, res: Response) {
+    const authReq = req as AuthRequest;
+    const userId = authReq.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Authentication required' });
+    }
+
+    const { category, id } = req.params;
+
+    try {
+      const partner = await PartnerModel.findOne({ userId });
+      if (!partner && authReq.user?.role !== 'admin') {
+        return res.status(404).json({ success: false, message: 'Partner record not found' });
+      }
+
+      if (partner && partner.status === 'SUSPENDED') {
+        return res.status(403).json({ success: false, message: 'Suspended partner cannot modify active inventory.' });
+      }
+
+      const partnerIdStr = partner ? partner._id.toString() : '';
+      const modelMap: Record<string, any> = {
+        EVENT: EventModel,
+        SPORTS: SportsEventModel,
+        ATTRACTION: AttractionModel,
+        RESTAURANT: RestaurantModel,
+        EXPERIENCE: ExperienceModel,
+        MOVIE: MovieModel,
+        SHOW: ShowModel
+      };
+
+      const ModelClass = modelMap[String(category).toUpperCase()];
+      if (!ModelClass) {
+        return res.status(400).json({ success: false, message: 'Invalid domain category' });
+      }
+
+      const listing = await ModelClass.findById(id);
+      if (!listing) {
+        return res.status(404).json({ success: false, message: 'Listing not found' });
+      }
+
+      if (listing.partnerId && listing.partnerId.toString() !== partnerIdStr && authReq.user?.role !== 'admin') {
+        return res.status(403).json({ success: false, message: 'Unauthorized access to this listing' });
+      }
+
+      Object.assign(listing, req.body);
+      await listing.save();
+
+      await AuditLogModel.create({
+        actorUserId: userId,
+        actorRole: authReq.user?.role || 'partner',
+        action: 'listing_update',
+        targetId: id,
+        targetType: category,
+        details: { updatedFields: Object.keys(req.body) },
+        timestamp: new Date()
+      }).catch(() => null);
+
+      return res.json({ success: true, message: 'Listing updated successfully', data: listing });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: 'Failed to update listing', error: err?.message });
+    }
+  }
+
+  /**
+   * Delete partner listing
+   */
+  static async deleteListing(req: Request, res: Response) {
+    const authReq = req as AuthRequest;
+    const userId = authReq.user?.userId;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Authentication required' });
+    }
+
+    const { category, id } = req.params;
+
+    try {
+      const partner = await PartnerModel.findOne({ userId });
+      if (!partner && authReq.user?.role !== 'admin') {
+        return res.status(404).json({ success: false, message: 'Partner record not found' });
+      }
+
+      if (partner && partner.status === 'SUSPENDED') {
+        return res.status(403).json({ success: false, message: 'Suspended partner cannot modify or delete active inventory.' });
+      }
+
+      const partnerIdStr = partner ? partner._id.toString() : '';
+      const modelMap: Record<string, any> = {
+        EVENT: EventModel,
+        SPORTS: SportsEventModel,
+        ATTRACTION: AttractionModel,
+        RESTAURANT: RestaurantModel,
+        EXPERIENCE: ExperienceModel,
+        MOVIE: MovieModel,
+        SHOW: ShowModel
+      };
+
+      const ModelClass = modelMap[String(category).toUpperCase()];
+      if (!ModelClass) {
+        return res.status(400).json({ success: false, message: 'Invalid domain category' });
+      }
+
+      const listing = await ModelClass.findById(id);
+      if (!listing) {
+        return res.status(404).json({ success: false, message: 'Listing not found' });
+      }
+
+      if (listing.partnerId && listing.partnerId.toString() !== partnerIdStr && authReq.user?.role !== 'admin') {
+        return res.status(403).json({ success: false, message: 'Unauthorized access to this listing' });
+      }
+
+      await ModelClass.deleteOne({ _id: id });
+
+      if (partner) {
+        partner.totalListings = Math.max(0, partner.totalListings - 1);
+        await partner.save();
+      }
+
+      await AuditLogModel.create({
+        actorUserId: userId,
+        actorRole: authReq.user?.role || 'partner',
+        action: 'listing_deletion',
+        targetId: id,
+        targetType: category,
+        details: { category, id },
+        timestamp: new Date()
+      }).catch(() => null);
+
+      return res.json({ success: true, message: 'Listing deleted successfully' });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: 'Failed to delete listing', error: err?.message });
     }
   }
 
@@ -654,7 +874,7 @@ export class PartnerController {
     }
 
     const { status } = req.query;
-    const query = status ? { status: String(status).toUpperCase() } : {};
+    const query: any = status ? { status: String(status).toUpperCase() } : {};
 
     try {
       const partners = await PartnerModel.find(query).sort({ createdAt: -1 });
@@ -725,6 +945,23 @@ export class PartnerController {
       });
     } catch (err: any) {
       return res.status(500).json({ success: false, message: 'Failed to update partner status', error: err?.message });
+    }
+  }
+
+  /**
+   * Admin endpoint: Get audit logs
+   */
+  static async getAuditLogs(req: Request, res: Response) {
+    const authReq = req as AuthRequest;
+    if (authReq.user?.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Admin privilege required' });
+    }
+
+    try {
+      const logs = await AuditLogModel.find().sort({ timestamp: -1 }).limit(100);
+      return res.json({ success: true, data: logs });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: 'Failed to fetch audit logs', error: err?.message });
     }
   }
 }

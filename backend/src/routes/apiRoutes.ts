@@ -11,6 +11,10 @@ import userRoutes from './userRoutes.js';
 import couponRoutes from './couponRoutes.js';
 import searchRoutes from './searchRoutes.js';
 import paymentRoutes from './paymentRoutes.js';
+import adminRoutes from './adminRoutes.js';
+import hotelRoutes from './hotelRoutes.js';
+import { authenticate } from '../middleware/authMiddleware.js';
+import { AdminController } from '../controllers/adminController.js';
 
 const router = Router();
 
@@ -38,5 +42,11 @@ router.use('/partner', unwrap(partnerRoutes));
 router.use('/coupons', unwrap(couponRoutes));
 router.use('/search', unwrap(searchRoutes));
 router.use('/payments', unwrap(paymentRoutes));
+router.use('/admin', unwrap(adminRoutes));
+router.use('/hotels', unwrap(hotelRoutes));
+
+// Customer Support Endpoints
+router.post('/support', authenticate, AdminController.submitSupportTicket);
+router.get('/support/my', authenticate, AdminController.getMySupportTickets);
 
 export default router;
