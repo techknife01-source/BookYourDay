@@ -15,6 +15,9 @@ import { AttractionModel } from '../models/Attraction.js';
 import { RestaurantModel } from '../models/Restaurant.js';
 import { ExperienceModel } from '../models/Experience.js';
 
+import { TravelPackageModel } from '../models/TravelPackage.js';
+import { TravelTransferModel } from '../models/TravelTransfer.js';
+
 export class AdminController {
   /**
    * 1. Overview Metrics with Date Range Filtering
@@ -765,6 +768,126 @@ export class AdminController {
       return res.json({ success: true, data: tickets });
     } catch (err: any) {
       return res.status(500).json({ success: false, message: 'Failed to fetch support tickets', error: err?.message });
+    }
+  }
+
+  /**
+   * 11. Travel Packages Admin Moderation
+   */
+  static async getAdminTravelPackages(req: Request, res: Response) {
+    try {
+      const { status, partnerId, search } = req.query;
+      const query: any = {};
+      if (status) query.status = status;
+      if (partnerId) query.partnerId = partnerId;
+      if (search) {
+        const regex = new RegExp(String(search), 'i');
+        query.$or = [{ title: regex }, { origin: regex }, { destination: regex }];
+      }
+
+      const packages = await TravelPackageModel.find(query).sort({ createdAt: -1 });
+      const enriched = packages.map((p) => ({ ...p.toObject(), id: p._id.toString() }));
+      return res.json({ success: true, data: enriched });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: 'Failed to fetch travel packages', error: err?.message });
+    }
+  }
+
+  static async moderateTravelPackage(req: Request, res: Response) {
+    const authReq = req as AuthRequest;
+    const { id } = req.params;
+    const { status, rejectionReason } = req.body;
+
+    if (!['APPROVED', 'REJECTED', 'PUBLISHED', 'PAUSED', 'DRAFT', 'SUBMITTED'].includes(status)) {
+      return res.status(400).json({ success: false, message: 'Invalid status' });
+    }
+
+    try {
+      const pkg = await TravelPackageModel.findById(id);
+      if (!pkg) {
+        return res.status(404).json({ success: false, message: 'Travel package not found' });
+      }
+
+      pkg.status = status;
+      await pkg.save();
+
+      await AuditLogModel.create({
+        actorUserId: authReq.user?.userId || 'admin',
+        actorRole: 'admin',
+        action: `TRAVEL_PACKAGE_${status}`,
+        targetId: id,
+        targetType: 'TRAVEL_PACKAGE',
+        details: { status, rejectionReason },
+        timestamp: new Date()
+      }).catch(() => null);
+
+      return res.json({
+        success: true,
+        message: `Travel package status updated to ${status}`,
+        data: { ...pkg.toObject(), id: pkg._id.toString() }
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: 'Failed to moderate travel package', error: err?.message });
+    }
+  }
+
+  /**
+   * 12. Travel Transfers Admin Moderation
+   */
+  static async getAdminTransfers(req: Request, res: Response) {
+    try {
+      const { status, partnerId, search } = req.query;
+      const query: any = {};
+      if (status) query.status = status;
+      if (partnerId) query.partnerId = partnerId;
+      if (search) {
+        const regex = new RegExp(String(search), 'i');
+        query.$or = [{ title: regex }, { origin: regex }, { destination: regex }, { vehicleType: regex }];
+      }
+
+      const transfers = await TravelTransferModel.find(query).sort({ createdAt: -1 });
+      const enriched = transfers.map((t) => ({ ...t.toObject(), id: t._id.toString() }));
+      return res.json({ success: true, data: enriched });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: 'Failed to fetch travel transfers', error: err?.message });
+    }
+  }
+
+  static async moderateTransfer(req: Request, res: Response) {
+    const authReq = req as AuthRequest;
+    const { id } = req.params;
+    const { status, rejectionReason } = req.body;
+
+    if (!['APPROVED', 'REJECTED', 'PUBLISHED', 'PAUSED', 'DRAFT', 'SUBMITTED'].includes(status)) {
+      return res.status(400).json({ success: false, message: 'Invalid status' });
+    }
+
+    try {
+      const tr = await TravelTransferModel.findById(id);
+      if (!tr) {
+        return res.status(404).json({ success: false, message: 'Transfer not found' });
+      }
+
+      tr.status = status;
+      await tr.save();
+
+      await AuditLogModel.create({
+        actorUserId: authReq.user?.userId || 'admin',
+        actorRole: 'admin',
+        action: `TRAVEL_TRANSFER_${status}`,
+        targetId: id,
+        targetType: 'TRAVEL_TRANSFER',
+        details: { status, rejectionReason },
+        timestamp: new Date()
+      }).catch(() => null);
+
+      return res.json({
+        success: true,
+        message: `Transfer status updated to ${status}`,
+        data: { ...tr.toObject(), id: tr._id.toString() }
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: 'Failed to moderate transfer', error: err?.message });
     }
   }
 }

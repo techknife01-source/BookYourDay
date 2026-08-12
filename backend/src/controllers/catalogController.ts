@@ -7,10 +7,12 @@ import { RestaurantModel } from '../models/Restaurant.js';
 import { ExperienceModel } from '../models/Experience.js';
 import { HotelModel } from '../models/Hotel.js';
 import { RoomTypeModel } from '../models/RoomType.js';
+import { TravelPackageModel } from '../models/TravelPackage.js';
+import { TravelTransferModel } from '../models/TravelTransfer.js';
 
 export interface CatalogItem {
   id: string;
-  category: 'MOVIE' | 'EVENT' | 'SPORTS' | 'ATTRACTION' | 'RESTAURANT' | 'EXPERIENCE' | 'HOTEL';
+  category: 'MOVIE' | 'EVENT' | 'SPORTS' | 'ATTRACTION' | 'RESTAURANT' | 'EXPERIENCE' | 'HOTEL' | 'TRAVEL' | 'TRANSFER' | string;
   title: string;
   description: string;
   image: string;
@@ -21,8 +23,12 @@ export interface CatalogItem {
   reviewCount?: number;
   priceFrom?: number;
   currency?: string;
-  availability?: 'AVAILABLE' | 'FEW_LEFT' | 'SOLD_OUT';
+  availability?: 'AVAILABLE' | 'FEW_LEFT' | 'LIMITED' | 'SOLD_OUT' | string;
   metadata: Record<string, any>;
+  distanceKm?: number | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  matchType?: 'GEO_MATCH' | 'CITY_MATCH' | string;
 }
 
 function normalizeMovie(m: any): CatalogItem {
@@ -164,6 +170,59 @@ function normalizeExperience(x: any): CatalogItem {
       duration: x.duration,
       highlights: x.highlights,
       isPopular: x.isPopular
+    }
+  };
+}
+
+function normalizeTravelPackage(pkg: any): CatalogItem {
+  return {
+    id: pkg._id ? pkg._id.toString() : pkg.id,
+    category: 'TRAVEL',
+    title: pkg.title,
+    description: pkg.description,
+    image: pkg.images?.[0] || 'https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=600&auto=format&fit=crop&q=80',
+    city: pkg.destination,
+    location: `${pkg.origin} to ${pkg.destination}`,
+    rating: pkg.rating || 4.8,
+    reviewCount: pkg.reviewCount || 45,
+    priceFrom: pkg.startingPrice,
+    currency: 'INR',
+    availability: pkg.availableCapacity > 0 ? 'AVAILABLE' : 'SOLD_OUT',
+    metadata: {
+      origin: pkg.origin,
+      destination: pkg.destination,
+      durationDays: pkg.durationDays,
+      durationNights: pkg.durationNights,
+      inclusions: pkg.inclusions,
+      exclusions: pkg.exclusions,
+      itinerary: pkg.itinerary,
+      cancellationPolicy: pkg.cancellationPolicy,
+      availableCapacity: pkg.availableCapacity
+    }
+  };
+}
+
+function normalizeTravelTransfer(tr: any): CatalogItem {
+  return {
+    id: tr._id ? tr._id.toString() : tr.id,
+    category: 'TRANSFER',
+    title: tr.title,
+    description: tr.description,
+    image: tr.images?.[0] || 'https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?w=600&auto=format&fit=crop&q=80',
+    city: tr.destination,
+    location: `${tr.origin} → ${tr.destination}`,
+    rating: tr.rating || 4.7,
+    reviewCount: tr.reviewCount || 30,
+    priceFrom: tr.pricePerVehicle,
+    currency: 'INR',
+    availability: tr.availableCapacity > 0 ? 'AVAILABLE' : 'SOLD_OUT',
+    metadata: {
+      origin: tr.origin,
+      destination: tr.destination,
+      vehicleType: tr.vehicleType,
+      capacity: tr.capacity,
+      cancellationPolicy: tr.cancellationPolicy,
+      availableCapacity: tr.availableCapacity
     }
   };
 }

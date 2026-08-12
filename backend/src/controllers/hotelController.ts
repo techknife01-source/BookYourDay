@@ -1,12 +1,12 @@
 import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import { AuthRequest } from '../middleware/authMiddleware.js';
-import { HotelModel } from '../models/Hotel.ts';
-import { RoomTypeModel } from '../models/RoomType.ts';
-import { RoomInventoryModel } from '../models/RoomInventory.ts';
-import { HotelReservationModel } from '../models/HotelReservation.ts';
+import { HotelModel } from '../models/Hotel.js';
+import { RoomTypeModel } from '../models/RoomType.js';
+import { RoomInventoryModel } from '../models/RoomInventory.js';
+import { HotelReservationModel } from '../models/HotelReservation.js';
 import { BookingModel } from '../models/Booking.js';
-import { TicketModel } from '../models/Ticket.js';
+import { PartnerModel } from '../models/Partner.js';
 import { PricingService } from '../services/pricingService.js';
 import { RazorpayService } from '../services/razorpayService.js';
 import { AuditLogModel } from '../models/AuditLog.js';
@@ -71,7 +71,7 @@ export class HotelController {
       // Enhance with room pricing & availability
       const hotelList = await Promise.all(
         hotels.map(async (h) => {
-          const roomTypes = await RoomTypeModel.find({ hotelId: h._id, status: 'ACTIVE' });
+          const roomTypes = await RoomTypeModel.find({ hotelId: h._id.toString(), status: 'ACTIVE' });
           let minBasePrice = 1500;
           if (roomTypes.length > 0) {
             minBasePrice = Math.min(...roomTypes.map((r) => r.basePrice));
@@ -157,9 +157,15 @@ export class HotelController {
 
       // Customer visibility check: must be PUBLISHED unless partner or admin
       const authReq = req as AuthRequest;
+      let partnerIdStr = '';
+      if (authReq.user?.role === 'partner' && authReq.user?.userId) {
+        const partner = await PartnerModel.findOne({ userId: authReq.user.userId });
+        if (partner) partnerIdStr = partner._id.toString();
+      }
+
       const isOwnerOrAdmin =
         authReq.user?.role === 'admin' ||
-        (authReq.user?.role === 'partner' && authReq.user?.partnerId === hotel.partnerId);
+        (authReq.user?.role === 'partner' && partnerIdStr && partnerIdStr === hotel.partnerId);
 
       if (hotel.status !== 'PUBLISHED' && !isOwnerOrAdmin) {
         return res.status(404).json({
@@ -188,13 +194,13 @@ export class HotelController {
         roomTypes.map(async (rt) => {
           const totalUnits = await RoomInventoryModel.find({
             hotelId: id,
-            roomTypeId: rt._id,
+            roomTypeId: rt._id.toString(),
             status: 'AVAILABLE'
           });
 
           // Check occupied units for checkIn < checkOut
           const occupiedReservations = await HotelReservationModel.find({
-            inventoryId: { $in: totalUnits.map((u) => u._id) },
+            inventoryId: { $in: totalUnits.map((u) => u._id.toString()) },
             status: { $in: ['CONFIRMED', 'PAYMENT_PENDING'] },
             $or: [
               { expiresAt: { $exists: false } },
@@ -356,7 +362,7 @@ export class HotelController {
     if (effectiveKey) {
       const existing = await BookingModel.findOne({ idempotencyKey: effectiveKey });
       if (existing) {
-        const obj = existing.toObject ? existing.toObject() : existing;
+        const obj: any = existing.toObject ? existing.toObject() : existing;
         return res.status(200).json({
           success: true,
           message: 'Booking retrieved from idempotent request',
@@ -415,7 +421,7 @@ export class HotelController {
       // Query active reservations for date range overlap
       // Two reservations overlap if: checkIn < requestedCheckOut AND checkOut > requestedCheckIn
       const occupiedReservations = await HotelReservationModel.find({
-        inventoryId: { $in: allInventoryUnits.map((u) => u._id) },
+        inventoryId: { $in: allInventoryUnits.map((u) => u._id.toString()) },
         status: { $in: ['CONFIRMED', 'PAYMENT_PENDING'] },
         $or: [
           { expiresAt: { $exists: false } },
@@ -440,16 +446,10 @@ export class HotelController {
 
       // Server-side Pricing Calculation
       const basePrice = roomType.basePrice;
-      const subtotal = basePrice * nights * numRooms;
-      const convenienceFee = Math.round(subtotal * 0.05);
-      const taxes = Math.round(subtotal * 0.12); // GST
-
-      const pricing = await PricingService.calculateTotal({
-        subtotal,
-        convenienceFee,
-        taxes,
-        couponCode,
-        category: 'HOTEL'
+      const pricing = await PricingService.calculatePriceAsync({
+        unitPrice: basePrice * nights,
+        quantity: numRooms,
+        couponCode
       });
 
       const bookingNumber = `BYD-HTL-${Date.now().toString(36).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -558,8 +558,13 @@ export class HotelController {
   // PARTNER MANAGEMENT ENDPOINTS
   static async createHotelPartner(req: Request, res: Response) {
     const authReq = req as AuthRequest;
-    if (!authReq.user || authReq.user.role !== 'partner' || !authReq.user.partnerId) {
+    if (!authReq.user || authReq.user.role !== 'partner' || !authReq.user.userId) {
       return res.status(403).json({ success: false, message: 'Partner authentication required.' });
+    }
+
+    const partner = await PartnerModel.findOne({ userId: authReq.user.userId });
+    if (!partner) {
+      return res.status(403).json({ success: false, message: 'Partner profile not found.' });
     }
 
     const {
@@ -584,7 +589,7 @@ export class HotelController {
 
     try {
       const hotel = new HotelModel({
-        partnerId: authReq.user.partnerId,
+        partnerId: partner._id.toString(),
         name,
         description,
         images: images && images.length ? images : ['https://images.unsplash.com/photo-1566073771259-6a8506099945?w=600&auto=format&fit=crop&q=80'],
@@ -625,15 +630,20 @@ export class HotelController {
 
   static async getPartnerHotels(req: Request, res: Response) {
     const authReq = req as AuthRequest;
-    if (!authReq.user || authReq.user.role !== 'partner' || !authReq.user.partnerId) {
+    if (!authReq.user || authReq.user.role !== 'partner' || !authReq.user.userId) {
       return res.status(403).json({ success: false, message: 'Partner authentication required.' });
     }
 
+    const partner = await PartnerModel.findOne({ userId: authReq.user.userId });
+    if (!partner) {
+      return res.status(403).json({ success: false, message: 'Partner profile not found.' });
+    }
+
     try {
-      const hotels = await HotelModel.find({ partnerId: authReq.user.partnerId });
+      const hotels = await HotelModel.find({ partnerId: partner._id.toString() });
       const enrichedHotels = await Promise.all(
         hotels.map(async (h) => {
-          const roomTypes = await RoomTypeModel.find({ hotelId: h._id });
+          const roomTypes = await RoomTypeModel.find({ hotelId: h._id.toString() });
           return {
             ...h.toObject(),
             id: h._id.toString(),
@@ -650,8 +660,13 @@ export class HotelController {
 
   static async createRoomTypePartner(req: Request, res: Response) {
     const authReq = req as AuthRequest;
-    if (!authReq.user || authReq.user.role !== 'partner' || !authReq.user.partnerId) {
+    if (!authReq.user || authReq.user.role !== 'partner' || !authReq.user.userId) {
       return res.status(403).json({ success: false, message: 'Partner authentication required.' });
+    }
+
+    const partner = await PartnerModel.findOne({ userId: authReq.user.userId });
+    if (!partner) {
+      return res.status(403).json({ success: false, message: 'Partner profile not found.' });
     }
 
     const {
@@ -675,7 +690,7 @@ export class HotelController {
     try {
       // Security check: verify hotel belongs to partner
       const hotel = await HotelModel.findById(hotelId);
-      if (!hotel || hotel.partnerId !== authReq.user.partnerId) {
+      if (!hotel || hotel.partnerId !== partner._id.toString()) {
         return res.status(403).json({ success: false, message: 'Unauthorized access to hotel.' });
       }
 
@@ -720,14 +735,19 @@ export class HotelController {
 
   static async getPartnerRoomTypes(req: Request, res: Response) {
     const authReq = req as AuthRequest;
-    if (!authReq.user || authReq.user.role !== 'partner' || !authReq.user.partnerId) {
+    if (!authReq.user || authReq.user.role !== 'partner' || !authReq.user.userId) {
       return res.status(403).json({ success: false, message: 'Partner authentication required.' });
+    }
+
+    const partner = await PartnerModel.findOne({ userId: authReq.user.userId });
+    if (!partner) {
+      return res.status(403).json({ success: false, message: 'Partner profile not found.' });
     }
 
     const { hotelId } = req.params;
     try {
       const hotel = await HotelModel.findById(hotelId);
-      if (!hotel || hotel.partnerId !== authReq.user.partnerId) {
+      if (!hotel || hotel.partnerId !== partner._id.toString()) {
         return res.status(403).json({ success: false, message: 'Unauthorized access.' });
       }
 
@@ -741,8 +761,13 @@ export class HotelController {
   // Get partner's hotel reservations
   static async getPartnerReservations(req: Request, res: Response) {
     const authReq = req as AuthRequest;
-    if (!authReq.user || authReq.user.role !== 'partner' || !authReq.user.partnerId) {
+    if (!authReq.user || authReq.user.role !== 'partner' || !authReq.user.userId) {
       return res.status(403).json({ success: false, message: 'Partner authentication required.' });
+    }
+
+    const partner = await PartnerModel.findOne({ userId: authReq.user.userId });
+    if (!partner) {
+      return res.status(403).json({ success: false, message: 'Partner profile not found.' });
     }
 
     try {
@@ -751,7 +776,7 @@ export class HotelController {
         .limit(100);
 
       // Filter reservations belonging to partner's hotels
-      const partnerHotels = await HotelModel.find({ partnerId: authReq.user.partnerId });
+      const partnerHotels = await HotelModel.find({ partnerId: partner._id.toString() });
       const partnerHotelIds = new Set(partnerHotels.map((h) => h._id.toString()));
 
       const filtered = reservations.filter((r) => partnerHotelIds.has(r.hotelId));

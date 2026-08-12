@@ -3,14 +3,19 @@ import dns from 'node:dns';
 import { env } from './env.js';
 import { MovieModel } from '../models/Movie.js';
 
+let hasAttemptedConnection = false;
+let connectionResult = false;
+
 export async function connectDatabase(): Promise<boolean> {
-  mongoose.set('bufferCommands', true);
+  if (hasAttemptedConnection) return connectionResult;
+  hasAttemptedConnection = true;
+  mongoose.set('bufferCommands', false);
   const rawUri = env.MONGODB_URI || process.env.MONGODB_URI || '';
   const uri = rawUri.trim() !== '' && !rawUri.includes('<USE_THE_MONGODB_ATLAS_URI') 
     ? rawUri 
     : 'mongodb://127.0.0.1:27017/bookyourday';
 
-  // Configure optional custom DNS servers if MONGODB_DNS_SERVERS environment variable is set
+  // Configure optional custom DNS servers
   const rawDnsServers = env.MONGODB_DNS_SERVERS || process.env.MONGODB_DNS_SERVERS || '';
   if (rawDnsServers.trim().length > 0) {
     const servers = rawDnsServers
@@ -30,23 +35,15 @@ export async function connectDatabase(): Promise<boolean> {
 
   const isProduction = env.NODE_ENV === 'production';
 
-  if (!uri || uri.trim() === '') {
-    if (isProduction) {
-      console.error('❌ [Database] MONGODB_URI is not configured in production environment.');
-      return false;
-    }
-    console.log('ℹ️ [Database] MONGODB_URI not configured. Attempting connection to local MongoDB...');
-  }
-
   try {
     const options: mongoose.ConnectOptions = {
       dbName: 'book-your-day',
-      serverSelectionTimeoutMS: 5000,
+      serverSelectionTimeoutMS: 2000,
+      connectTimeoutMS: 2000,
     };
 
     const conn = await mongoose.connect(uri, options);
-
-    console.log(`✅ [Database] MongoDB Atlas Connected successfully! Host: ${conn.connection.host} | DB: book-your-day`);
+    console.log(`✅ [Database] MongoDB Connected successfully! Host: ${conn.connection.host} | DB: book-your-day`);
 
     // Check if initial seeding is required
     const movieCount = await (MovieModel as any).countDocuments().catch(() => 0);
@@ -60,15 +57,16 @@ export async function connectDatabase(): Promise<boolean> {
       }
     }
 
+    connectionResult = true;
     return true;
   } catch (error: any) {
     const safeErrorMessage = error?.message ? error.message.replace(/mongodb\+srv:\/\/[^@]+@/, 'mongodb+srv://***:***@') : 'Connection failed';
-
     if (isProduction) {
       console.error(`❌ [Database] Production MongoDB connection failed: ${safeErrorMessage}`);
     } else {
-      console.warn(`⚠️ [Database] Connection warning: ${safeErrorMessage}. Running in development fallback mode.`);
+      console.warn(`⚠️ [Database] Connection warning: ${safeErrorMessage}. Running with local memory/mock fallback.`);
     }
+    connectionResult = false;
     return false;
   }
 }

@@ -42,6 +42,12 @@ router.get('/search', AdminController.globalAdminSearch);
 router.get('/support', AdminController.getSupportTickets);
 router.patch('/support/:id', AdminController.updateSupportTicket);
 
+// Travel Packages & Transfers Moderation
+router.get('/travel/packages', AdminController.getAdminTravelPackages);
+router.patch('/travel/packages/:id/status', AdminController.moderateTravelPackage);
+router.get('/travel/transfers', AdminController.getAdminTransfers);
+router.patch('/travel/transfers/:id/status', AdminController.moderateTransfer);
+
 // Audit Logs
 router.get('/audit-logs', PartnerController.getAuditLogs);
 

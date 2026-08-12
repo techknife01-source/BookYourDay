@@ -11,6 +11,9 @@ export interface IExperience extends Document {
   description: string;
   highlights: string[];
   isPopular?: boolean;
+  latitude?: number;
+  longitude?: number;
+  locationGeo?: { type: 'Point'; coordinates: number[] };
   partnerId?: string;
   status?: 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'PUBLISHED' | 'PAUSED';
 }
@@ -26,10 +29,17 @@ const ExperienceSchema = new Schema<IExperience>({
   description: { type: String, required: true },
   highlights: [{ type: String }],
   isPopular: { type: Boolean, default: false },
+  latitude: { type: Number },
+  longitude: { type: Number },
+  locationGeo: {
+    type: { type: String, enum: ['Point'], default: 'Point' },
+    coordinates: { type: [Number], default: undefined }
+  },
   partnerId: { type: String, index: true },
   status: { type: String, enum: ['DRAFT', 'SUBMITTED', 'APPROVED', 'PUBLISHED', 'PAUSED'], default: 'PUBLISHED', index: true }
 });
 
 ExperienceSchema.index({ title: 1, city: 1, pricePerPerson: 1, rating: -1 });
+ExperienceSchema.index({ locationGeo: '2dsphere' }, { sparse: true });
 
 export const ExperienceModel: Model<IExperience> = (mongoose.models.Experience || mongoose.model<IExperience>('Experience', ExperienceSchema)) as any;

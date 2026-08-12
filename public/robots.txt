@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /partner
+Disallow: /profile
+Disallow: /tickets
+Disallow: /api/
+
+Sitemap: https://bookyourday.com/sitemap.xml

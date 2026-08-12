@@ -24,12 +24,15 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   const navLinks = [
     { label: 'Home', path: '/' },
+    { label: 'AI Planner ✨', path: '/planner' },
+    { label: 'Nearby 📍', path: '/nearby' },
     { label: 'Movies', path: '/movies' },
     { label: 'Events', path: '/events' },
     { label: 'Sports', path: '/sports' },
     { label: 'Parks', path: '/attractions' },
     { label: 'Play', path: '/experiences' },
     { label: 'Dining', path: '/dining' },
+    { label: 'Travel', path: '/travel' },
     { label: 'Offers', path: '/offers' }
   ];
 

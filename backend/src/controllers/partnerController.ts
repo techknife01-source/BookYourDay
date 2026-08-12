@@ -16,6 +16,8 @@ import { PaymentModel } from '../models/Payment.js';
 import { HotelModel } from '../models/Hotel.js';
 import { RoomTypeModel } from '../models/RoomType.js';
 import { RoomInventoryModel } from '../models/RoomInventory.js';
+import { TravelPackageModel } from '../models/TravelPackage.js';
+import { TravelTransferModel } from '../models/TravelTransfer.js';
 
 export class PartnerController {
   /**
@@ -47,7 +49,7 @@ export class PartnerController {
       });
     }
 
-    const validBusinessTypes = ['Cinema', 'Event', 'Sports', 'Attraction', 'Restaurant', 'Experience', 'Hotel'];
+    const validBusinessTypes = ['Cinema', 'Event', 'Sports', 'Attraction', 'Restaurant', 'Experience', 'Hotel', 'Travel', 'Transfer'];
     const isTypeValid = validBusinessTypes.some(
       t => t.toLowerCase() === String(businessType).trim().toLowerCase()
     );
@@ -168,14 +170,17 @@ export class PartnerController {
       const partnerIdStr = partner._id.toString();
 
       // Find all listings owned by this partner across domains
-      const [events, sports, attractions, restaurants, experiences, movies, shows] = await Promise.all([
+      const [events, sports, attractions, restaurants, experiences, movies, shows, hotels, packages, transfers] = await Promise.all([
         EventModel.find({ partnerId: partnerIdStr }),
         SportsEventModel.find({ partnerId: partnerIdStr }),
         AttractionModel.find({ partnerId: partnerIdStr }),
         RestaurantModel.find({ partnerId: partnerIdStr }),
         ExperienceModel.find({ partnerId: partnerIdStr }),
         MovieModel.find({ partnerId: partnerIdStr }),
-        ShowModel.find({ partnerId: partnerIdStr })
+        ShowModel.find({ partnerId: partnerIdStr }),
+        HotelModel.find({ partnerId: partnerIdStr }),
+        TravelPackageModel.find({ partnerId: partnerIdStr }),
+        TravelTransferModel.find({ partnerId: partnerIdStr })
       ]);
 
       const itemIds = [
@@ -185,7 +190,10 @@ export class PartnerController {
         ...restaurants.map(r => r._id.toString()),
         ...experiences.map(x => x._id.toString()),
         ...movies.map(m => m._id.toString()),
-        ...shows.map(s => s._id.toString())
+        ...shows.map(s => s._id.toString()),
+        ...hotels.map(h => h._id.toString()),
+        ...packages.map(p => p._id.toString()),
+        ...transfers.map(t => t._id.toString())
       ];
 
       // Find bookings belonging to partner
@@ -208,7 +216,7 @@ export class PartnerController {
       const refundedPayments = payments.filter(p => p.status === 'REFUNDED');
       const refundsAmount = refundedPayments.reduce((sum, p) => sum + p.amount, 0);
 
-      const totalListings = events.length + sports.length + attractions.length + restaurants.length + experiences.length + movies.length + shows.length;
+      const totalListings = events.length + sports.length + attractions.length + restaurants.length + experiences.length + movies.length + shows.length + hotels.length + packages.length + transfers.length;
 
       return res.json({
         success: true,
@@ -234,7 +242,10 @@ export class PartnerController {
           ...attractions.map(a => ({ id: a._id, title: a.title, category: 'ATTRACTION', status: a.status || 'PUBLISHED', price: a.entryPrice })),
           ...restaurants.map(r => ({ id: r._id, title: r.name, category: 'RESTAURANT', status: r.status || 'PUBLISHED', price: r.costForTwo })),
           ...experiences.map(x => ({ id: x._id, title: x.title, category: 'EXPERIENCE', status: x.status || 'PUBLISHED', price: x.pricePerPerson })),
-          ...movies.map(m => ({ id: m._id, title: m.title, category: 'MOVIE', status: m.status || 'PUBLISHED', price: 250 }))
+          ...movies.map(m => ({ id: m._id, title: m.title, category: 'MOVIE', status: m.status || 'PUBLISHED', price: 250 })),
+          ...hotels.map(h => ({ id: h._id, title: h.name, category: 'HOTEL', status: h.status || 'PUBLISHED', price: 2800 })),
+          ...packages.map(p => ({ id: p._id, title: p.title, category: 'TRAVEL', status: p.status || 'PUBLISHED', price: p.startingPrice })),
+          ...transfers.map(t => ({ id: t._id, title: t.title, category: 'TRANSFER', status: t.status || 'PUBLISHED', price: t.pricePerVehicle }))
         ].slice(0, 10)
       });
     } catch (err: any) {
@@ -260,7 +271,7 @@ export class PartnerController {
 
       const partnerIdStr = partner._id.toString();
 
-      const [events, sports, attractions, restaurants, experiences, movies, shows, hotels] = await Promise.all([
+      const [events, sports, attractions, restaurants, experiences, movies, shows, hotels, packages, transfers] = await Promise.all([
         EventModel.find({ partnerId: partnerIdStr }),
         SportsEventModel.find({ partnerId: partnerIdStr }),
         AttractionModel.find({ partnerId: partnerIdStr }),
@@ -268,7 +279,9 @@ export class PartnerController {
         ExperienceModel.find({ partnerId: partnerIdStr }),
         MovieModel.find({ partnerId: partnerIdStr }),
         ShowModel.find({ partnerId: partnerIdStr }),
-        HotelModel.find({ partnerId: partnerIdStr })
+        HotelModel.find({ partnerId: partnerIdStr }),
+        TravelPackageModel.find({ partnerId: partnerIdStr }),
+        TravelTransferModel.find({ partnerId: partnerIdStr })
       ]);
 
       const items = [
@@ -279,7 +292,9 @@ export class PartnerController {
         ...experiences.map(x => ({ ...x.toObject(), category: 'EXPERIENCE', id: x._id.toString() })),
         ...movies.map(m => ({ ...m.toObject(), category: 'MOVIE', id: m._id.toString() })),
         ...shows.map(s => ({ ...s.toObject(), category: 'SHOW', id: s._id.toString() })),
-        ...hotels.map(h => ({ ...h.toObject(), category: 'HOTEL', id: h._id.toString() }))
+        ...hotels.map(h => ({ ...h.toObject(), category: 'HOTEL', id: h._id.toString() })),
+        ...packages.map(p => ({ ...p.toObject(), category: 'TRAVEL', id: p._id.toString() })),
+        ...transfers.map(t => ({ ...t.toObject(), category: 'TRANSFER', id: t._id.toString() }))
       ];
 
       return res.json({ success: true, data: items });
@@ -527,7 +542,13 @@ export class PartnerController {
         RESTAURANT: RestaurantModel,
         EXPERIENCE: ExperienceModel,
         MOVIE: MovieModel,
-        SHOW: ShowModel
+        SHOW: ShowModel,
+        HOTEL: HotelModel,
+        TRAVEL: TravelPackageModel,
+        PACKAGE: TravelPackageModel,
+        TRAVEL_PACKAGE: TravelPackageModel,
+        TRANSFER: TravelTransferModel,
+        TRAVEL_TRANSFER: TravelTransferModel
       };
 
       const ModelClass = modelMap[String(category).toUpperCase()];
@@ -617,7 +638,13 @@ export class PartnerController {
         RESTAURANT: RestaurantModel,
         EXPERIENCE: ExperienceModel,
         MOVIE: MovieModel,
-        SHOW: ShowModel
+        SHOW: ShowModel,
+        HOTEL: HotelModel,
+        TRAVEL: TravelPackageModel,
+        PACKAGE: TravelPackageModel,
+        TRAVEL_PACKAGE: TravelPackageModel,
+        TRANSFER: TravelTransferModel,
+        TRAVEL_TRANSFER: TravelTransferModel
       };
 
       const ModelClass = modelMap[String(category).toUpperCase()];
@@ -683,7 +710,13 @@ export class PartnerController {
         RESTAURANT: RestaurantModel,
         EXPERIENCE: ExperienceModel,
         MOVIE: MovieModel,
-        SHOW: ShowModel
+        SHOW: ShowModel,
+        HOTEL: HotelModel,
+        TRAVEL: TravelPackageModel,
+        PACKAGE: TravelPackageModel,
+        TRAVEL_PACKAGE: TravelPackageModel,
+        TRANSFER: TravelTransferModel,
+        TRAVEL_TRANSFER: TravelTransferModel
       };
 
       const ModelClass = modelMap[String(category).toUpperCase()];
@@ -741,14 +774,17 @@ export class PartnerController {
 
       const partnerIdStr = partner ? partner._id.toString() : req.query.partnerId as string;
 
-      const [events, sports, attractions, restaurants, experiences, movies, shows] = await Promise.all([
+      const [events, sports, attractions, restaurants, experiences, movies, shows, hotels, packages, transfers] = await Promise.all([
         EventModel.find({ partnerId: partnerIdStr }),
         SportsEventModel.find({ partnerId: partnerIdStr }),
         AttractionModel.find({ partnerId: partnerIdStr }),
         RestaurantModel.find({ partnerId: partnerIdStr }),
         ExperienceModel.find({ partnerId: partnerIdStr }),
         MovieModel.find({ partnerId: partnerIdStr }),
-        ShowModel.find({ partnerId: partnerIdStr })
+        ShowModel.find({ partnerId: partnerIdStr }),
+        HotelModel.find({ partnerId: partnerIdStr }),
+        TravelPackageModel.find({ partnerId: partnerIdStr }),
+        TravelTransferModel.find({ partnerId: partnerIdStr })
       ]);
 
       const itemIds = [
@@ -758,7 +794,10 @@ export class PartnerController {
         ...restaurants.map(r => r._id.toString()),
         ...experiences.map(x => x._id.toString()),
         ...movies.map(m => m._id.toString()),
-        ...shows.map(s => s._id.toString())
+        ...shows.map(s => s._id.toString()),
+        ...hotels.map(h => h._id.toString()),
+        ...packages.map(p => p._id.toString()),
+        ...transfers.map(t => t._id.toString())
       ];
 
       const bookings = await BookingModel.find({
@@ -808,14 +847,17 @@ export class PartnerController {
 
       const partnerIdStr = partner._id.toString();
 
-      const [events, sports, attractions, restaurants, experiences, movies, shows] = await Promise.all([
+      const [events, sports, attractions, restaurants, experiences, movies, shows, hotels, packages, transfers] = await Promise.all([
         EventModel.find({ partnerId: partnerIdStr }),
         SportsEventModel.find({ partnerId: partnerIdStr }),
         AttractionModel.find({ partnerId: partnerIdStr }),
         RestaurantModel.find({ partnerId: partnerIdStr }),
         ExperienceModel.find({ partnerId: partnerIdStr }),
         MovieModel.find({ partnerId: partnerIdStr }),
-        ShowModel.find({ partnerId: partnerIdStr })
+        ShowModel.find({ partnerId: partnerIdStr }),
+        HotelModel.find({ partnerId: partnerIdStr }),
+        TravelPackageModel.find({ partnerId: partnerIdStr }),
+        TravelTransferModel.find({ partnerId: partnerIdStr })
       ]);
 
       const itemIds = [
@@ -825,7 +867,10 @@ export class PartnerController {
         ...restaurants.map(r => r._id.toString()),
         ...experiences.map(x => x._id.toString()),
         ...movies.map(m => m._id.toString()),
-        ...shows.map(s => s._id.toString())
+        ...shows.map(s => s._id.toString()),
+        ...hotels.map(h => h._id.toString()),
+        ...packages.map(p => p._id.toString()),
+        ...transfers.map(t => t._id.toString())
       ];
 
       const bookings = await BookingModel.find({

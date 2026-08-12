@@ -12,6 +12,9 @@ export interface IAttraction extends Document {
   description: string;
   inclusions: string[];
   isTrending?: boolean;
+  latitude?: number;
+  longitude?: number;
+  locationGeo?: { type: 'Point'; coordinates: number[] };
   partnerId?: string;
   status?: 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'PUBLISHED' | 'PAUSED';
 }
@@ -28,10 +31,17 @@ const AttractionSchema = new Schema<IAttraction>({
   description: { type: String, required: true },
   inclusions: [{ type: String }],
   isTrending: { type: Boolean, default: false },
+  latitude: { type: Number },
+  longitude: { type: Number },
+  locationGeo: {
+    type: { type: String, enum: ['Point'], default: 'Point' },
+    coordinates: { type: [Number], default: undefined }
+  },
   partnerId: { type: String, index: true },
   status: { type: String, enum: ['DRAFT', 'SUBMITTED', 'APPROVED', 'PUBLISHED', 'PAUSED'], default: 'PUBLISHED', index: true }
 });
 
 AttractionSchema.index({ title: 1, city: 1, entryPrice: 1, rating: -1 });
+AttractionSchema.index({ locationGeo: '2dsphere' }, { sparse: true });
 
 export const AttractionModel: Model<IAttraction> = (mongoose.models.Attraction || mongoose.model<IAttraction>('Attraction', AttractionSchema)) as any;

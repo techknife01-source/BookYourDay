@@ -11,6 +11,7 @@ export interface IHotel extends Document {
   country: string;
   latitude: number;
   longitude: number;
+  locationGeo?: { type: 'Point'; coordinates: number[] };
   rating: number;
   reviewCount: number;
   amenities: string[];
@@ -33,6 +34,10 @@ const HotelSchema = new Schema<IHotel>({
   country: { type: String, default: 'India' },
   latitude: { type: Number, default: 22.5726 },
   longitude: { type: Number, default: 88.3639 },
+  locationGeo: {
+    type: { type: String, enum: ['Point'], default: 'Point' },
+    coordinates: { type: [Number], default: undefined }
+  },
   rating: { type: Number, default: 4.5 },
   reviewCount: { type: Number, default: 120 },
   amenities: [{ type: String }],
@@ -52,5 +57,6 @@ const HotelSchema = new Schema<IHotel>({
 }, { timestamps: true });
 
 HotelSchema.index({ name: 'text', description: 'text', city: 'text' });
+HotelSchema.index({ locationGeo: '2dsphere' }, { sparse: true });
 
 export const HotelModel: Model<IHotel> = (mongoose.models.Hotel || mongoose.model<IHotel>('Hotel', HotelSchema)) as any;

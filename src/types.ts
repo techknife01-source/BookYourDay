@@ -209,7 +209,7 @@ export interface UserProfile {
 
 export interface CatalogItem {
   id: string;
-  category: 'MOVIE' | 'EVENT' | 'SPORTS' | 'ATTRACTION' | 'RESTAURANT' | 'EXPERIENCE';
+  category: 'MOVIE' | 'EVENT' | 'SPORTS' | 'ATTRACTION' | 'RESTAURANT' | 'EXPERIENCE' | 'HOTEL' | 'TRAVEL' | 'TRANSFER' | string;
   title: string;
   description: string;
   image: string;
@@ -220,8 +220,12 @@ export interface CatalogItem {
   reviewCount?: number;
   priceFrom?: number;
   currency?: string;
-  availability?: 'AVAILABLE' | 'FEW_LEFT' | 'SOLD_OUT';
+  availability?: 'AVAILABLE' | 'FEW_LEFT' | 'LIMITED' | 'SOLD_OUT' | string;
   metadata: Record<string, any>;
+  distanceKm?: number | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  matchType?: 'GEO_MATCH' | 'CITY_MATCH' | string;
 }
 
 export interface ApiResponse<T = any> {
@@ -265,5 +269,66 @@ export interface SearchFilters {
   page?: number;
   limit?: number;
 }
+
+export interface DayPlanItem {
+  id: string;
+  category: 'MOVIE' | 'EVENT' | 'SPORTS' | 'ATTRACTION' | 'EXPERIENCE' | 'RESTAURANT' | 'HOTEL' | 'TRAVEL' | 'TRANSFER' | string;
+  inventoryId: string;
+  title: string;
+  description?: string;
+  startTime: string;
+  endTime: string;
+  durationMinutes: number;
+  priceFrom: number;
+  estimatedCost: number;
+  distanceKm: number | null;
+  travelTimeMinutes: number;
+  location: string;
+  city: string;
+  latitude?: number;
+  longitude?: number;
+  availability: 'AVAILABLE' | 'LIMITED' | 'UNAVAILABLE';
+  bookingUrl: string;
+  rating?: number;
+  image?: string;
+  metadata?: Record<string, any>;
+}
+
+export interface DayPlan {
+  id: string;
+  city: string;
+  date: string;
+  budget: number;
+  estimatedTotal: number;
+  remainingBudget: number;
+  currency: string;
+  items: DayPlanItem[];
+  warnings: string[];
+  assumptions: string[];
+  aiExplanation?: string;
+  isFallback?: boolean;
+}
+
+export interface PlannerRequest {
+  prompt?: string;
+  city: string;
+  latitude?: number;
+  longitude?: number;
+  date?: string;
+  startTime?: string;
+  endTime?: string;
+  budget: number;
+  currency?: string;
+  guests?: number;
+  adults?: number;
+  children?: number;
+  interests?: string[];
+  categories?: string[];
+  foodPreferences?: string[];
+  activityPreferences?: string[];
+  transportPreference?: string;
+  pace?: 'relaxed' | 'moderate' | 'packed';
+}
+
 
 

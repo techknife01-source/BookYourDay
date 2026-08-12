@@ -7,6 +7,8 @@ import { PricingService } from '../services/pricingService.js';
 import { RefundService } from '../services/refundService.js';
 import { PaymentModel } from '../models/Payment.js';
 import { RazorpayService } from '../services/razorpayService.js';
+import { TravelPackageModel } from '../models/TravelPackage.js';
+import { TravelTransferModel } from '../models/TravelTransfer.js';
 
 export class BookingController {
   static async createBooking(req: Request, res: Response) {
@@ -408,6 +410,23 @@ export class BookingController {
             { $pull: { bookedSeats: { $in: seatsToRelease } } }
           ).catch(console.error);
         }
+      }
+
+      // Release travel package capacity if category is TRAVEL
+      if (booking.category === 'TRAVEL' && booking.itemId) {
+        await TravelPackageModel.updateOne(
+          { _id: booking.itemId },
+          { $inc: { availableCapacity: 1 } }
+        ).catch(console.error);
+      }
+
+      // Release travel transfer capacity if category is TRANSFER
+      if (booking.category === 'TRANSFER' && booking.itemId) {
+        const qty = Math.max(1, Number(booking.quantity) || 1);
+        await TravelTransferModel.updateOne(
+          { _id: booking.itemId },
+          { $inc: { availableCapacity: qty } }
+        ).catch(console.error);
       }
 
       // Update ticket status

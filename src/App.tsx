@@ -25,6 +25,9 @@ import { ProfilePage } from './pages/ProfilePage';
 import { AdminDashboard } from './pages/AdminDashboard';
 import { PartnerDashboard } from './pages/PartnerDashboard';
 import { SearchResultsPage } from './pages/SearchResultsPage';
+import { TravelPage } from './pages/TravelPage';
+import { NearbyPage } from './pages/NearbyPage';
+import { PlannerPage } from './pages/PlannerPage';
 
 export default function App() {
   const [currentCity, setCurrentCity] = useState('Asansol');
@@ -65,6 +68,17 @@ export default function App() {
             <Route path="/attractions" element={<AttractionsPage />} />
             <Route path="/experiences" element={<ExperiencesPage />} />
             <Route path="/dining" element={<DiningPage />} />
+            <Route path="/travel" element={<TravelPage />} />
+            <Route
+              path="/nearby"
+              element={
+                <NearbyPage
+                  currentCity={currentCity}
+                  onOpenLocationModal={() => setLocationModalOpen(true)}
+                />
+              }
+            />
+            <Route path="/planner" element={<PlannerPage currentCity={currentCity} />} />
             <Route path="/offers" element={<OffersPage />} />
             <Route path="/wishlist" element={<WishlistPage />} />
             <Route path="/tickets" element={<MyTicketsPage />} />

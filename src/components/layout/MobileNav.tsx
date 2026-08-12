@@ -1,17 +1,17 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Home, Compass, Ticket, Heart, User } from 'lucide-react';
+import { Home, MapPin, Compass, Ticket, Heart, User } from 'lucide-react';
 import { BookingService } from '../../services/bookingService';
 
 export const MobileNav: React.FC = () => {
   const location = useLocation();
   const wishlistCount = BookingService.getWishlist().length;
 
-  const items = [
+  const items: { label: string; path: string; icon: any; badge?: number }[] = [
     { label: 'Home', path: '/', icon: Home },
+    { label: 'Nearby', path: '/nearby', icon: MapPin },
     { label: 'Explore', path: '/movies', icon: Compass },
     { label: 'Tickets', path: '/tickets', icon: Ticket },
-    { label: 'Wishlist', path: '/wishlist', icon: Heart, badge: wishlistCount },
     { label: 'Profile', path: '/profile', icon: User }
   ];
 

@@ -9,6 +9,8 @@ import { ExperienceModel } from '../models/Experience.js';
 import { RestaurantModel } from '../models/Restaurant.js';
 import { HotelModel } from '../models/Hotel.js';
 import { RoomTypeModel } from '../models/RoomType.js';
+import { TravelPackageModel } from '../models/TravelPackage.js';
+import { TravelTransferModel } from '../models/TravelTransfer.js';
 import { CatalogItem } from './catalogController.js';
 
 function escapeRegex(str: string): string {
@@ -187,6 +189,59 @@ function normalizeHotel(h: any, minPrice = 1500): CatalogItem {
   };
 }
 
+function normalizeTravelPackage(pkg: any): CatalogItem {
+  return {
+    id: pkg._id ? pkg._id.toString() : pkg.id,
+    category: 'TRAVEL',
+    title: pkg.title,
+    description: pkg.description,
+    image: pkg.images?.[0] || 'https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=600&auto=format&fit=crop&q=80',
+    city: pkg.destination,
+    location: `${pkg.origin} to ${pkg.destination}`,
+    rating: pkg.rating || 4.8,
+    reviewCount: pkg.reviewCount || 45,
+    priceFrom: pkg.startingPrice,
+    currency: 'INR',
+    availability: pkg.availableCapacity > 0 ? 'AVAILABLE' : 'SOLD_OUT',
+    metadata: {
+      origin: pkg.origin,
+      destination: pkg.destination,
+      durationDays: pkg.durationDays,
+      durationNights: pkg.durationNights,
+      inclusions: pkg.inclusions,
+      exclusions: pkg.exclusions,
+      itinerary: pkg.itinerary,
+      cancellationPolicy: pkg.cancellationPolicy,
+      availableCapacity: pkg.availableCapacity
+    }
+  };
+}
+
+function normalizeTravelTransfer(tr: any): CatalogItem {
+  return {
+    id: tr._id ? tr._id.toString() : tr.id,
+    category: 'TRANSFER',
+    title: tr.title,
+    description: tr.description,
+    image: tr.images?.[0] || 'https://images.unsplash.com/photo-1549317661-bd32c8ce0db2?w=600&auto=format&fit=crop&q=80',
+    city: tr.destination,
+    location: `${tr.origin} → ${tr.destination}`,
+    rating: tr.rating || 4.7,
+    reviewCount: tr.reviewCount || 30,
+    priceFrom: tr.pricePerVehicle,
+    currency: 'INR',
+    availability: tr.availableCapacity > 0 ? 'AVAILABLE' : 'SOLD_OUT',
+    metadata: {
+      origin: tr.origin,
+      destination: tr.destination,
+      vehicleType: tr.vehicleType,
+      capacity: tr.capacity,
+      cancellationPolicy: tr.cancellationPolicy,
+      availableCapacity: tr.availableCapacity
+    }
+  };
+}
+
 const FALLBACK_ITEMS: CatalogItem[] = [
   {
     id: 'm1',
@@ -294,9 +349,15 @@ const FALLBACK_ITEMS: CatalogItem[] = [
   }
 ];
 
+import { NearbyController } from './nearbyController.js';
+
 export class SearchController {
   static async search(req: Request, res: Response) {
     try {
+      if (req.query.lat || req.query.lng || req.query.latitude || req.query.longitude || req.query.radius) {
+        return NearbyController.getNearby(req, res);
+      }
+
       if (mongoose.connection.readyState !== 1) {
         await connectDB();
       }
@@ -319,6 +380,8 @@ export class SearchController {
       const queryExperiences = !rawCategory || rawCategory === 'ALL' || rawCategory === 'EXPERIENCE' || rawCategory === 'EXPERIENCES' || rawCategory === 'PLAY';
       const queryRestaurants = !rawCategory || rawCategory === 'ALL' || rawCategory === 'RESTAURANT' || rawCategory === 'RESTAURANTS' || rawCategory === 'DINING';
       const queryHotels = !rawCategory || rawCategory === 'ALL' || rawCategory === 'HOTEL' || rawCategory === 'HOTELS' || rawCategory === 'STAYS';
+      const queryTravel = !rawCategory || rawCategory === 'ALL' || rawCategory === 'TRAVEL' || rawCategory === 'PACKAGES' || rawCategory === 'TRAVEL_PACKAGES';
+      const queryTransfers = !rawCategory || rawCategory === 'ALL' || rawCategory === 'TRANSFER' || rawCategory === 'TRANSFERS';
 
       const resultsPromises: Promise<CatalogItem[]>[] = [];
 
@@ -534,6 +597,72 @@ export class SearchController {
 
           const docs = await (HotelModel as any).find(hQuery).lean().maxTimeMS(5000).catch(() => []);
           return docs.map((h: any) => normalizeHotel(h, 2500));
+        })());
+      }
+
+      // 8. Travel Package Query
+      if (queryTravel) {
+        resultsPromises.push((async () => {
+          const tpQuery: any = { status: 'PUBLISHED' };
+          if (regexQ) {
+            tpQuery.$or = [
+              { title: regexQ },
+              { description: regexQ },
+              { origin: regexQ },
+              { destination: regexQ },
+              { inclusions: regexQ }
+            ];
+          }
+          if (regexCity) {
+            tpQuery.$or = [
+              { destination: regexCity },
+              { origin: regexCity }
+            ];
+          }
+          if (minRating !== undefined) {
+            tpQuery.rating = { $gte: minRating };
+          }
+          if (minPrice !== undefined || maxPrice !== undefined) {
+            tpQuery.startingPrice = {};
+            if (minPrice !== undefined) tpQuery.startingPrice.$gte = minPrice;
+            if (maxPrice !== undefined) tpQuery.startingPrice.$lte = maxPrice;
+          }
+
+          const docs = await (TravelPackageModel as any).find(tpQuery).lean().maxTimeMS(5000).catch(() => []);
+          return docs.map(normalizeTravelPackage);
+        })());
+      }
+
+      // 9. Travel Transfer Query
+      if (queryTransfers) {
+        resultsPromises.push((async () => {
+          const ttQuery: any = { status: 'PUBLISHED' };
+          if (regexQ) {
+            ttQuery.$or = [
+              { title: regexQ },
+              { description: regexQ },
+              { origin: regexQ },
+              { destination: regexQ },
+              { vehicleType: regexQ }
+            ];
+          }
+          if (regexCity) {
+            ttQuery.$or = [
+              { destination: regexCity },
+              { origin: regexCity }
+            ];
+          }
+          if (minRating !== undefined) {
+            ttQuery.rating = { $gte: minRating };
+          }
+          if (minPrice !== undefined || maxPrice !== undefined) {
+            ttQuery.pricePerVehicle = {};
+            if (minPrice !== undefined) ttQuery.pricePerVehicle.$gte = minPrice;
+            if (maxPrice !== undefined) ttQuery.pricePerVehicle.$lte = maxPrice;
+          }
+
+          const docs = await (TravelTransferModel as any).find(ttQuery).lean().maxTimeMS(5000).catch(() => []);
+          return docs.map(normalizeTravelTransfer);
         })());
       }
 

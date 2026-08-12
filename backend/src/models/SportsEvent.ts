@@ -16,6 +16,9 @@ export interface ISportsEvent extends Document {
   description: string;
   ticketTiers: { id: string; name: string; price: number; description: string; availableQuantity: number }[];
   isTrending?: boolean;
+  latitude?: number;
+  longitude?: number;
+  locationGeo?: { type: 'Point'; coordinates: number[] };
   partnerId?: string;
   status?: 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'PUBLISHED' | 'PAUSED';
 }
@@ -36,10 +39,17 @@ const SportsEventSchema = new Schema<ISportsEvent>({
   description: { type: String, required: true },
   ticketTiers: [{ id: String, name: String, price: Number, description: String, availableQuantity: Number }],
   isTrending: { type: Boolean, default: false },
+  latitude: { type: Number },
+  longitude: { type: Number },
+  locationGeo: {
+    type: { type: String, enum: ['Point'], default: 'Point' },
+    coordinates: { type: [Number], default: undefined }
+  },
   partnerId: { type: String, index: true },
   status: { type: String, enum: ['DRAFT', 'SUBMITTED', 'APPROVED', 'PUBLISHED', 'PAUSED'], default: 'PUBLISHED', index: true }
 });
 
 SportsEventSchema.index({ title: 1, city: 1, startingPrice: 1, rating: -1 });
+SportsEventSchema.index({ locationGeo: '2dsphere' }, { sparse: true });
 
 export const SportsEventModel: Model<ISportsEvent> = (mongoose.models.SportsEvent || mongoose.model<ISportsEvent>('SportsEvent', SportsEventSchema)) as any;
