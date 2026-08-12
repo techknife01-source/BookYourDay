@@ -157,7 +157,7 @@ export class NearbyController {
                 description: m.description,
                 image: m.poster,
                 backdrop: m.backdrop,
-                city: nearestVenue?.city || m.city || 'Asansol',
+                city: nearestVenue?.city || 'Asansol',
                 location: nearestVenue ? `${nearestVenue.name}, ${nearestVenue.city}` : 'Grand Cineplex',
                 rating: m.rating || 4.9,
                 reviewCount: m.votesCount || 1000,
@@ -852,9 +852,9 @@ export class NearbyController {
       // Sorting
       if (sort === 'distance') {
         allItems.sort((a, b) => {
-          if (a.distanceKm !== null && b.distanceKm !== null) return a.distanceKm - b.distanceKm;
-          if (a.distanceKm !== null) return -1;
-          if (b.distanceKm !== null) return 1;
+          const distA = a.distanceKm ?? Number.POSITIVE_INFINITY;
+          const distB = b.distanceKm ?? Number.POSITIVE_INFINITY;
+          if (distA !== distB) return distA - distB;
           return (b.rating || 0) - (a.rating || 0);
         });
       } else if (sort === 'price_low') {
@@ -868,7 +868,9 @@ export class NearbyController {
         allItems.sort((a, b) => {
           if (a.matchType === 'GEO_MATCH' && b.matchType !== 'GEO_MATCH') return -1;
           if (a.matchType !== 'GEO_MATCH' && b.matchType === 'GEO_MATCH') return 1;
-          if (a.distanceKm !== null && b.distanceKm !== null) return a.distanceKm - b.distanceKm;
+          const distA = a.distanceKm ?? Number.POSITIVE_INFINITY;
+          const distB = b.distanceKm ?? Number.POSITIVE_INFINITY;
+          if (distA !== distB) return distA - distB;
           return (b.rating || 0) - (a.rating || 0);
         });
       }
