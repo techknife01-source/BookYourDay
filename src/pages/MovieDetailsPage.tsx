@@ -1,23 +1,68 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Star, ArrowLeft, Loader2 } from 'lucide-react';
+import { Star, ArrowLeft, Loader2, MapPin } from 'lucide-react';
 import { catalogApi } from '../api/catalogApi';
-import { MOCK_CINEMAS } from '../data/mockData';
 import { SeatSelector } from '../components/booking/SeatSelector';
 import { CheckoutModal } from '../components/booking/CheckoutModal';
 import { DigitalTicketModal } from '../components/booking/DigitalTicketModal';
+import { ReviewSection } from '../components/reviews/ReviewSection';
 import { Booking, Seat, Movie } from '../types';
 import { PriceBreakdown } from '../utils/pricing';
+
+interface LiveCinemaShow {
+  id: string;
+  name: string;
+  address: string;
+  city: string;
+  facilities: string[];
+  shows: {
+    id: string;
+    time: string;
+    language: string;
+    format: string;
+    startingPrice: number;
+    priceCategories: { category: string; price: number }[];
+    bookedSeats: string[];
+  }[];
+}
 
 export const MovieDetailsPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [movie, setMovie] = useState<Movie | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [cinemas, setCinemas] = useState<LiveCinemaShow[]>([]);
+  const [cinemasLoading, setCinemasLoading] = useState<boolean>(false);
 
-  const [selectedDate, setSelectedDate] = useState('Today, 10 Aug');
-  const [selectedFormat, setSelectedFormat] = useState('IMAX 3D');
-  const [activeShow, setActiveShow] = useState<{ cinemaName: string; showtime: string; price: number } | null>(null);
+  // Dynamic Date Generation (Today + 4 days)
+  const dateOptions = React.useMemo(() => {
+    const list = [];
+    const now = new Date();
+    for (let i = 0; i < 5; i++) {
+      const d = new Date(now);
+      d.setDate(now.getDate() + i);
+      const iso = d.toISOString().split('T')[0];
+      const label =
+        i === 0
+          ? `Today, ${d.toLocaleDateString('en-US', { day: 'numeric', month: 'short' })}`
+          : i === 1
+          ? `Tomorrow, ${d.toLocaleDateString('en-US', { day: 'numeric', month: 'short' })}`
+          : d.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short' });
+      list.push({ label, iso });
+    }
+    return list;
+  }, []);
+
+  const [selectedDate, setSelectedDate] = useState<string>(dateOptions[0].label);
+  const [selectedIsoDate, setSelectedIsoDate] = useState<string>(dateOptions[0].iso);
+  const [selectedFormat, setSelectedFormat] = useState('2D');
+  const [activeShow, setActiveShow] = useState<{
+    showId: string;
+    cinemaName: string;
+    showtime: string;
+    price: number;
+    format: string;
+  } | null>(null);
 
   const [selectedSeats, setSelectedSeats] = useState<Seat[]>([]);
   const [priceBreakdown, setPriceBreakdown] = useState<PriceBreakdown | null>(null);
@@ -25,6 +70,7 @@ export const MovieDetailsPage: React.FC = () => {
   const [completedBooking, setCompletedBooking] = useState<Booking | null>(null);
   const [digitalTicketOpen, setDigitalTicketOpen] = useState(false);
 
+  // Fetch Movie Data
   useEffect(() => {
     let mounted = true;
     async function fetchMovieDetails() {
@@ -34,6 +80,8 @@ export const MovieDetailsPage: React.FC = () => {
         const item = await catalogApi.getItemById('movies', id);
         if (!mounted) return;
         if (item) {
+          const defaultFmt = item.metadata?.format?.[0] || '2D';
+          setSelectedFormat(defaultFmt);
           setMovie({
             id: item.id,
             title: item.title,
@@ -62,9 +110,34 @@ export const MovieDetailsPage: React.FC = () => {
     return () => { mounted = false; };
   }, [id]);
 
-  const handleSelectShow = (cinemaName: string, showtime: string, price: number) => {
-    setActiveShow({ cinemaName, showtime, price });
-    window.scrollTo({ top: 600, behavior: 'smooth' });
+  // Fetch Live Cinema Shows for selected Date
+  useEffect(() => {
+    let mounted = true;
+    async function fetchShows() {
+      if (!id) return;
+      setCinemasLoading(true);
+      try {
+        const data = await catalogApi.getMovieShows(id, { date: selectedIsoDate });
+        if (!mounted) return;
+        if (Array.isArray(data) && data.length > 0) {
+          setCinemas(data);
+        } else {
+          setCinemas([]);
+        }
+      } catch (err) {
+        console.warn('Shows fetch error:', err);
+      } finally {
+        if (mounted) setCinemasLoading(false);
+      }
+    }
+
+    fetchShows();
+    return () => { mounted = false; };
+  }, [id, selectedIsoDate]);
+
+  const handleSelectShow = (showId: string, cinemaName: string, showtime: string, price: number, format: string) => {
+    setActiveShow({ showId, cinemaName, showtime, price, format });
+    window.scrollTo({ top: 650, behavior: 'smooth' });
   };
 
   const handleProceedToCheckout = (seats: Seat[], breakdown: PriceBreakdown) => {
@@ -185,17 +258,21 @@ export const MovieDetailsPage: React.FC = () => {
 
           {/* Date Selector Pills */}
           <div className="flex items-center gap-3 overflow-x-auto no-scrollbar">
-            {['Today, 10 Aug', 'Tomorrow, 11 Aug', 'Wed, 12 Aug', 'Thu, 13 Aug', 'Fri, 14 Aug'].map((dt) => (
+            {dateOptions.map((opt) => (
               <button
-                key={dt}
-                onClick={() => setSelectedDate(dt)}
+                key={opt.iso}
+                onClick={() => {
+                  setSelectedDate(opt.label);
+                  setSelectedIsoDate(opt.iso);
+                  setActiveShow(null);
+                }}
                 className={`py-3 px-5 rounded-2xl border text-xs font-bold whitespace-nowrap transition-all ${
-                  selectedDate === dt
+                  selectedIsoDate === opt.iso
                     ? 'bg-rose-600 border-rose-500 text-white shadow-lg shadow-rose-900/30'
                     : 'bg-slate-900 border-slate-800 text-slate-300 hover:border-slate-700'
                 }`}
               >
-                {dt}
+                {opt.label}
               </button>
             ))}
           </div>
@@ -209,59 +286,84 @@ export const MovieDetailsPage: React.FC = () => {
           Available Cinema Halls
         </h2>
 
-        <div className="space-y-4">
-          {MOCK_CINEMAS.map((cinema) => (
-            <div
-              key={cinema.id}
-              className="p-6 bg-slate-900/40 border border-slate-800 rounded-3xl space-y-4 shadow-lg"
-            >
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-slate-800/80 pb-3">
-                <div>
-                  <h3 className="text-base font-bold text-white">{cinema.name}</h3>
-                  <p className="text-xs text-slate-400">{cinema.address} • {cinema.distanceKm} km away</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  {cinema.amenities.map((amenity) => (
-                    <span
-                      key={amenity}
-                      className="bg-slate-950 text-slate-400 border border-slate-800 text-[10px] font-bold px-2.5 py-0.5 rounded-full"
-                    >
-                      {amenity}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              {/* Showtimes buttons */}
-              <div className="flex items-center gap-3 flex-wrap">
-                {cinema.shows.map((show) => {
-                  const isSelected =
-                    activeShow?.cinemaName === cinema.name && activeShow?.showtime === show.showtime;
-
-                  return (
-                    <button
-                      key={show.id}
-                      onClick={() => handleSelectShow(cinema.name, show.showtime, show.price)}
-                      className={`p-3 rounded-2xl border text-left transition-all ${
-                        isSelected
-                          ? 'bg-rose-600 border-rose-500 text-white shadow-lg shadow-rose-900/40'
-                          : 'bg-slate-900/80 border-slate-800 text-slate-300 hover:border-slate-700 hover:text-white'
-                      }`}
-                    >
-                      <div className="font-extrabold text-sm">{show.showtime}</div>
-                      <div className="text-[10px] opacity-80 mt-0.5 font-semibold">
-                        {show.format} • ₹{show.price}
-                      </div>
-                      <span className="text-[9px] text-emerald-400 font-bold block mt-1">
-                        {show.availableSeatsCount} seats available
+        {cinemasLoading ? (
+          <div className="flex items-center justify-center p-12 text-slate-400 gap-2">
+            <Loader2 className="w-5 h-5 text-rose-500 animate-spin" />
+            <span className="text-xs font-bold">Checking real-time cinema schedules...</span>
+          </div>
+        ) : cinemas.length === 0 ? (
+          <div className="p-8 text-center bg-slate-900/40 border border-slate-800 rounded-3xl space-y-2">
+            <p className="text-sm font-bold text-white">No shows currently listed for this date</p>
+            <p className="text-xs text-slate-400">Please choose another date from the pills above.</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {cinemas.map((cinema) => (
+              <div
+                key={cinema.id}
+                className="p-6 bg-slate-900/40 border border-slate-800 rounded-3xl space-y-4 shadow-lg hover:border-slate-700/80 transition-colors"
+              >
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b border-slate-800/80 pb-3">
+                  <div>
+                    <h3 className="text-base font-bold text-white flex items-center gap-2">
+                      <span>{cinema.name}</span>
+                      <span className="text-slate-500 text-xs font-medium">({cinema.city})</span>
+                    </h3>
+                    <p className="text-xs text-slate-400 flex items-center gap-1 mt-0.5">
+                      <MapPin className="w-3 h-3 text-rose-500 shrink-0" />
+                      <span>{cinema.address}</span>
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {cinema.facilities?.map((amenity) => (
+                      <span
+                        key={amenity}
+                        className="bg-slate-950 text-slate-400 border border-slate-800 text-[10px] font-bold px-2.5 py-0.5 rounded-full"
+                      >
+                        {amenity}
                       </span>
-                    </button>
-                  );
-                })}
+                    ))}
+                  </div>
+                </div>
+
+                {/* Showtimes buttons */}
+                <div className="flex items-center gap-3 flex-wrap">
+                  {cinema.shows.map((show) => {
+                    const isSelected = activeShow?.showId === show.id;
+
+                    return (
+                      <button
+                        key={show.id}
+                        onClick={() =>
+                          handleSelectShow(
+                            show.id,
+                            cinema.name,
+                            show.time,
+                            show.startingPrice || 250,
+                            show.format || selectedFormat
+                          )
+                        }
+                        className={`p-3 rounded-2xl border text-left transition-all ${
+                          isSelected
+                            ? 'bg-rose-600 border-rose-500 text-white shadow-lg shadow-rose-900/40'
+                            : 'bg-slate-900/80 border-slate-800 text-slate-300 hover:border-slate-700 hover:text-white'
+                        }`}
+                      >
+                        <div className="font-extrabold text-sm">{show.time}</div>
+                        <div className="text-[10px] opacity-80 mt-0.5 font-semibold">
+                          {show.format || '2D'} • ₹{show.startingPrice}
+                        </div>
+                        <span className="text-[9px] text-emerald-400 font-bold block mt-1">
+                          Available
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </section>
 
       {/* Interactive Seat Selection Section */}
@@ -272,10 +374,20 @@ export const MovieDetailsPage: React.FC = () => {
             cinemaName={activeShow.cinemaName}
             showtime={`${selectedDate} • ${activeShow.showtime}`}
             basePrice={activeShow.price}
+            showId={activeShow.showId}
             onProceedToCheckout={handleProceedToCheckout}
           />
         </section>
       )}
+
+      {/* Verified Reviews & Ratings Section */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <ReviewSection
+          itemId={movie.id}
+          itemType="movie"
+          itemTitle={movie.title}
+        />
+      </section>
 
       {/* Checkout Modal */}
       {priceBreakdown && activeShow && (
@@ -289,7 +401,7 @@ export const MovieDetailsPage: React.FC = () => {
           city="Asansol"
           date={selectedDate}
           time={activeShow.showtime}
-          seatsOrDetails={`Seats ${selectedSeats.map((s) => s.id).join(', ')} (${selectedFormat})`}
+          seatsOrDetails={`Seats ${selectedSeats.map((s) => s.id).join(', ')} (${activeShow.format})`}
           quantity={selectedSeats.length}
           initialPriceBreakdown={priceBreakdown}
           onBookingSuccess={handleBookingSuccess}

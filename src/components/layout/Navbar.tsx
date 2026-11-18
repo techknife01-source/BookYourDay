@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Search, MapPin, Heart, Ticket, User, Bell, Tag, ShieldCheck, Sparkles, Menu, X } from 'lucide-react';
+import { Search, MapPin, Heart, Ticket, User, Bell, Tag, ShieldCheck, Sparkles, Menu, X, LogIn, LogOut } from 'lucide-react';
 import { BookingService } from '../../services/bookingService';
+import { AuthModal } from '../common/AuthModal';
 
 interface NavbarProps {
   currentCity: string;
@@ -18,6 +19,26 @@ export const Navbar: React.FC<NavbarProps> = ({
 }) => {
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+  const [currentUser, setCurrentUser] = useState<any>(null);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('byd_user');
+      if (stored) {
+        setCurrentUser(JSON.parse(stored));
+      }
+    } catch {
+      setCurrentUser(null);
+    }
+  }, []);
+
+  const handleLogout = () => {
+    localStorage.removeItem('byd_auth_token');
+    localStorage.removeItem('byd_user');
+    setCurrentUser(null);
+    window.location.reload();
+  };
 
   const wishlistCount = BookingService.getWishlist().length;
   const unreadNotifsCount = BookingService.getNotifications().filter((n) => !n.isRead).length;
@@ -136,14 +157,36 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span>My Tickets</span>
             </Link>
 
-            {/* Profile Avatar */}
-            <Link
-              to="/profile"
-              className="w-8 h-8 rounded-full bg-gradient-to-tr from-rose-500 to-indigo-500 border border-slate-700 flex items-center justify-center text-white font-bold text-xs shadow-md"
-              title="Profile & Settings"
-            >
-              <User className="w-4 h-4" />
-            </Link>
+            {/* Auth / Profile Actions */}
+            {currentUser ? (
+              <div className="flex items-center gap-2">
+                <Link
+                  to="/profile"
+                  className="flex items-center gap-1.5 py-1 px-2.5 rounded-full bg-slate-900 border border-slate-700 text-xs font-bold text-slate-200 hover:border-slate-500 transition-all"
+                  title="Profile & Settings"
+                >
+                  <div className="w-6 h-6 rounded-full bg-gradient-to-tr from-rose-500 to-indigo-500 flex items-center justify-center text-white text-[10px]">
+                    {currentUser.name ? currentUser.name.charAt(0).toUpperCase() : 'U'}
+                  </div>
+                  <span className="hidden md:inline max-w-[80px] truncate">{currentUser.name}</span>
+                </Link>
+                <button
+                  onClick={handleLogout}
+                  className="p-1.5 text-slate-400 hover:text-rose-400"
+                  title="Sign Out"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setAuthModalOpen(true)}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-full shadow-lg shadow-rose-900/30 transition-all"
+              >
+                <LogIn className="w-3.5 h-3.5" />
+                <span>Sign In</span>
+              </button>
+            )}
 
             {/* Mobile Hamburger Menu button */}
             <button
@@ -190,6 +233,13 @@ export const Navbar: React.FC<NavbarProps> = ({
           </div>
         </div>
       )}
+
+      {/* Auth Modal */}
+      <AuthModal
+        isOpen={authModalOpen}
+        onClose={() => setAuthModalOpen(false)}
+        onAuthSuccess={(u) => setCurrentUser(u)}
+      />
     </nav>
   );
 };

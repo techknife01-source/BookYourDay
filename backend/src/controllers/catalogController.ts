@@ -424,22 +424,37 @@ export class CatalogController {
       const publishedFilter = { $or: [{ partnerId: { $exists: false } }, { partnerId: null }, { status: 'PUBLISHED' }] };
 
       if (rawCategory === 'movie' || rawCategory === 'movies') {
-        const movies = await (MovieModel as any).find({ ...queryCity, ...publishedFilter }).catch(() => []);
+        const movies = await (MovieModel as any).find({ ...publishedFilter }).catch(() => []);
         movies.forEach((m: any) => items.push(normalizeMovie(m)));
       } else if (rawCategory === 'event' || rawCategory === 'events') {
-        const events = await (EventModel as any).find({ ...queryCity, ...publishedFilter }).catch(() => []);
+        let events = await (EventModel as any).find({ ...queryCity, ...publishedFilter }).catch(() => []);
+        if (events.length === 0 && city) {
+          events = await (EventModel as any).find({ ...publishedFilter }).catch(() => []);
+        }
         events.forEach((e: any) => items.push(normalizeEvent(e)));
       } else if (rawCategory === 'sport' || rawCategory === 'sports') {
-        const sports = await (SportsEventModel as any).find({ ...queryCity, ...publishedFilter }).catch(() => []);
+        let sports = await (SportsEventModel as any).find({ ...queryCity, ...publishedFilter }).catch(() => []);
+        if (sports.length === 0 && city) {
+          sports = await (SportsEventModel as any).find({ ...publishedFilter }).catch(() => []);
+        }
         sports.forEach((s: any) => items.push(normalizeSports(s)));
       } else if (rawCategory === 'attraction' || rawCategory === 'attractions' || rawCategory === 'parks') {
-        const attr = await (AttractionModel as any).find({ ...queryCity, ...publishedFilter }).catch(() => []);
+        let attr = await (AttractionModel as any).find({ ...queryCity, ...publishedFilter }).catch(() => []);
+        if (attr.length === 0 && city) {
+          attr = await (AttractionModel as any).find({ ...publishedFilter }).catch(() => []);
+        }
         attr.forEach((a: any) => items.push(normalizeAttraction(a)));
       } else if (rawCategory === 'restaurant' || rawCategory === 'restaurants' || rawCategory === 'dining') {
-        const rest = await (RestaurantModel as any).find({ ...queryCity, ...publishedFilter }).catch(() => []);
+        let rest = await (RestaurantModel as any).find({ ...queryCity, ...publishedFilter }).catch(() => []);
+        if (rest.length === 0 && city) {
+          rest = await (RestaurantModel as any).find({ ...publishedFilter }).catch(() => []);
+        }
         rest.forEach((r: any) => items.push(normalizeRestaurant(r)));
       } else if (rawCategory === 'experience' || rawCategory === 'experiences' || rawCategory === 'play') {
-        const exp = await (ExperienceModel as any).find({ ...queryCity, ...publishedFilter }).catch(() => []);
+        let exp = await (ExperienceModel as any).find({ ...queryCity, ...publishedFilter }).catch(() => []);
+        if (exp.length === 0 && city) {
+          exp = await (ExperienceModel as any).find({ ...publishedFilter }).catch(() => []);
+        }
         exp.forEach((x: any) => items.push(normalizeExperience(x)));
       }
 
@@ -576,6 +591,75 @@ export class CatalogController {
           code: 'ITEM_FETCH_ERROR',
           details: error?.message || 'Database error'
         }
+      });
+    }
+  }
+
+  /**
+   * GET /api/catalog/recommendations
+   * Personalized, regional, and trending recommendations (Phase 9)
+   */
+  static async getRecommendations(req: Request, res: Response) {
+    const { city = 'Asansol' } = req.query;
+
+    try {
+      const publishedFilter = { $or: [{ partnerId: { $exists: false } }, { partnerId: null }, { status: 'PUBLISHED' }] };
+
+      const [movies, events, sports, attractions, experiences, restaurants] = await Promise.all([
+        (MovieModel as any).find({ ...publishedFilter }).sort({ rating: -1 }).limit(6).lean().catch(() => []),
+        (EventModel as any).find({ ...publishedFilter }).sort({ rating: -1 }).limit(6).lean().catch(() => []),
+        (SportsEventModel as any).find({ ...publishedFilter }).sort({ rating: -1 }).limit(6).lean().catch(() => []),
+        (AttractionModel as any).find({ ...publishedFilter }).sort({ rating: -1 }).limit(6).lean().catch(() => []),
+        (ExperienceModel as any).find({ ...publishedFilter }).sort({ rating: -1 }).limit(6).lean().catch(() => []),
+        (RestaurantModel as any).find({ ...publishedFilter }).sort({ rating: -1 }).limit(6).lean().catch(() => [])
+      ]);
+
+      const normMovies = movies.map(normalizeMovie);
+      const normEvents = events.map(normalizeEvent);
+      const normSports = sports.map(normalizeSports);
+      const normAttrs = attractions.map(normalizeAttraction);
+      const normExps = experiences.map(normalizeExperience);
+      const normRests = restaurants.map(normalizeRestaurant);
+
+      const all = [...normMovies, ...normEvents, ...normSports, ...normAttrs, ...normExps, ...normRests];
+
+      // 1. Recommended For You (Diverse mix of highest-rated across categories)
+      const recommendedForYou = [
+        normMovies[0],
+        normEvents[0],
+        normSports[0],
+        normAttrs[0],
+        normExps[0],
+        normRests[0]
+      ].filter(Boolean);
+
+      // 2. Popular Near You (Filtered by current city if available, otherwise regional)
+      const cityRegex = new RegExp(String(city), 'i');
+      let popularNearYou = all.filter((item) => item.city && cityRegex.test(item.city));
+      if (popularNearYou.length < 3) {
+        popularNearYou = all.filter((item) => (item.rating || 0) >= 4.7).slice(0, 6);
+      }
+
+      // 3. Trending Experiences
+      const trendingExperiences = all.filter((item) => item.metadata?.isTrending || (item.rating || 0) >= 4.8).slice(0, 6);
+
+      // 4. Top Rated
+      const topRated = [...all].sort((a, b) => (b.rating || 0) - (a.rating || 0)).slice(0, 6);
+
+      return res.json({
+        success: true,
+        data: {
+          recommendedForYou,
+          popularNearYou,
+          trendingExperiences,
+          topRated
+        }
+      });
+    } catch (err: any) {
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to fetch recommendations',
+        error: err?.message
       });
     }
   }

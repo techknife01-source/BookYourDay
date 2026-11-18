@@ -36,10 +36,5 @@ const PaymentSchema = new Schema<IPayment>({
   updatedAt: { type: Date, default: Date.now }
 });
 
-PaymentSchema.index({ razorpayOrderId: 1 });
-PaymentSchema.index({ razorpayPaymentId: 1 });
-PaymentSchema.index({ bookingId: 1 });
-PaymentSchema.index({ userId: 1 });
-
 export const PaymentModel: Model<IPayment> = (mongoose.models.Payment || mongoose.model<IPayment>('Payment', PaymentSchema)) as any;
 

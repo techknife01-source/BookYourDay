@@ -16,6 +16,9 @@ import hotelRoutes from './hotelRoutes.js';
 import travelRoutes from './travelRoutes.js';
 import nearbyRoutes from './nearbyRoutes.js';
 import plannerRoutes from './plannerRoutes.js';
+import notificationRoutes from './notificationRoutes.js';
+import reviewRoutes from './reviewRoutes.js';
+import chatRoutes from './chatRoutes.js';
 import { authenticate } from '../middleware/authMiddleware.js';
 import { AdminController } from '../controllers/adminController.js';
 
@@ -77,6 +80,9 @@ router.use('/hotels', unwrap(hotelRoutes));
 router.use('/travel', unwrap(travelRoutes));
 router.use('/nearby', unwrap(nearbyRoutes));
 router.use('/planner', unwrap(plannerRoutes));
+router.use('/notifications', unwrap(notificationRoutes));
+router.use('/reviews', unwrap(reviewRoutes));
+router.use('/chat', unwrap(chatRoutes));
 
 // Customer Support Endpoints
 router.post('/support', authenticate, AdminController.submitSupportTicket);

@@ -50,5 +50,16 @@ export const bookingsApi = {
       return response.data;
     }
     throw new Error(response.data?.message || 'Failed to cancel booking');
+  },
+
+  rescheduleBooking: async (bookingId: string, newDate: string, newTime: string): Promise<any> => {
+    const response = await apiClient.post<ApiResponse>(`/bookings/${bookingId}/reschedule`, {
+      newDate,
+      newTime
+    });
+    if (response.data && response.data.success) {
+      return response.data;
+    }
+    throw new Error(response.data?.message || 'Failed to reschedule booking');
   }
 };

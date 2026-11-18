@@ -4,14 +4,10 @@ import {
   MapPin,
   Navigation,
   Search,
-  Filter,
-  SlidersHorizontal,
   Compass,
   Star,
-  Tag,
   ArrowUpDown,
   RefreshCw,
-  Sparkles,
   ChevronRight,
   ChevronLeft,
   Film,
@@ -22,8 +18,11 @@ import {
   Hotel as HotelIcon,
   Plane,
   Car,
-  CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  LayoutGrid,
+  Map as MapIcon,
+  ExternalLink,
+  X
 } from 'lucide-react';
 import { CatalogItem } from '../types';
 import { NearbyService } from '../services/nearbyService';
@@ -76,6 +75,10 @@ export const NearbyPage: React.FC<NearbyPageProps> = ({ currentCity, onOpenLocat
   const [loading, setLoading] = useState(true);
   const [pagination, setPagination] = useState({ page: 1, limit: 12, total: 0, totalPages: 1 });
 
+  // Map & Grid View Modes
+  const [viewMode, setViewMode] = useState<'grid' | 'map'>('grid');
+  const [selectedMapItem, setSelectedMapItem] = useState<CatalogItem | null>(null);
+
   // Geolocation detection
   const handleDetectLocation = () => {
     setIsDetecting(true);
@@ -127,6 +130,9 @@ export const NearbyPage: React.FC<NearbyPageProps> = ({ currentCity, onOpenLocat
     if (res.success && res.data) {
       setItems(res.data.results || []);
       setPagination(res.data.pagination || { page: 1, limit: 12, total: 0, totalPages: 1 });
+      if (res.data.results && res.data.results.length > 0 && !selectedMapItem) {
+        setSelectedMapItem(res.data.results[0]);
+      }
     } else {
       setItems([]);
     }
@@ -171,13 +177,13 @@ export const NearbyPage: React.FC<NearbyPageProps> = ({ currentCity, onOpenLocat
   const handleItemClick = (item: CatalogItem) => {
     switch (item.category.toUpperCase()) {
       case 'MOVIE':
-        navigate(`/movie/${item.id}`);
+        navigate(`/movies/${item.id}`);
         break;
       case 'EVENT':
-        navigate(`/event/${item.id}`);
+        navigate(`/events/${item.id}`);
         break;
       case 'SPORTS':
-        navigate(`/sport/${item.id}`);
+        navigate(`/sports/${item.id}`);
         break;
       case 'ATTRACTION':
         navigate('/attractions');
@@ -300,15 +306,15 @@ export const NearbyPage: React.FC<NearbyPageProps> = ({ currentCity, onOpenLocat
 
       {/* Main Content Area */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 space-y-6">
-        {/* Radius & Filters Bar */}
+        {/* Radius, View Toggle & Filters Bar */}
         <div className="flex flex-wrap items-center justify-between gap-4 p-4 bg-[#0f172a]/60 border border-slate-800/80 rounded-2xl">
-          {/* Radius Selector */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+          {/* Radius Selector with wrapping fix */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5 shrink-0">
               <Compass className="w-3.5 h-3.5 text-rose-500" />
               Radius:
             </span>
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 flex-wrap">
               {RADIUS_OPTIONS.map((r) => (
                 <button
                   key={r}
@@ -326,6 +332,32 @@ export const NearbyPage: React.FC<NearbyPageProps> = ({ currentCity, onOpenLocat
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* View Mode Toggle (Grid vs Interactive Map) */}
+          <div className="flex items-center gap-1 bg-slate-950 p-1 border border-slate-800 rounded-xl">
+            <button
+              onClick={() => setViewMode('grid')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                viewMode === 'grid'
+                  ? 'bg-rose-600 text-white shadow-md'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+              <span>Grid View</span>
+            </button>
+            <button
+              onClick={() => setViewMode('map')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                viewMode === 'map'
+                  ? 'bg-rose-600 text-white shadow-md'
+                  : 'text-slate-400 hover:text-white'
+              }`}
+            >
+              <MapIcon className="w-3.5 h-3.5" />
+              <span>Interactive Map</span>
+            </button>
           </div>
 
           {/* Sort & Rating Controls */}
@@ -398,139 +430,254 @@ export const NearbyPage: React.FC<NearbyPageProps> = ({ currentCity, onOpenLocat
           {loading && <span className="text-rose-400 animate-pulse">Updating results...</span>}
         </div>
 
-        {/* Results Grid */}
-        {loading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <div
-                key={i}
-                className="bg-slate-900/50 border border-slate-800 rounded-2xl h-80 animate-pulse"
-              />
-            ))}
-          </div>
-        ) : items.length === 0 ? (
-          /* Empty State */
-          <div className="py-16 px-4 text-center bg-[#0f172a]/40 border border-slate-800/80 rounded-3xl space-y-4 max-w-lg mx-auto">
-            <div className="w-16 h-16 bg-rose-600/10 border border-rose-500/30 rounded-2xl flex items-center justify-center text-rose-500 mx-auto">
-              <MapPin className="w-8 h-8" />
+        {/* INTERACTIVE MAP VIEW */}
+        {viewMode === 'map' && (
+          <div className="bg-[#0b1329] border border-slate-800 rounded-3xl overflow-hidden shadow-2xl relative">
+            <div className="p-4 bg-slate-950 border-b border-slate-800 flex items-center justify-between text-xs">
+              <span className="font-bold text-white flex items-center gap-2">
+                <MapIcon className="w-4 h-4 text-rose-500" />
+                <span>Geographic Map View • {items.length} Pins Loaded</span>
+              </span>
+              <span className="text-slate-400">Click any marker pin on the map to inspect details</span>
             </div>
-            <h3 className="text-xl font-bold text-white">No items found within {radius} km</h3>
-            <p className="text-xs text-slate-400">
-              We couldn't find any live inventory matching your criteria in this exact radius. Try expanding your search radius or switching categories.
-            </p>
-            <div className="pt-2 flex flex-wrap items-center justify-center gap-3">
-              <button
-                onClick={() => setRadius(25)}
-                className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl transition-colors shadow-md"
-              >
-                Expand Radius to 25 km
-              </button>
-              <button
-                onClick={() => setCategory('ALL')}
-                className="px-4 py-2 bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 font-bold text-xs rounded-xl transition-colors"
-              >
-                Show All Categories
-              </button>
-            </div>
-          </div>
-        ) : (
-          /* Inventory Items Grid */
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {items.map((item) => {
-              const badge = getCategoryBadge(item.category);
-              const isAvailable = item.availability === 'AVAILABLE' || item.availability === 'LIMITED';
 
-              return (
-                <div
-                  key={item.id}
-                  onClick={() => handleItemClick(item)}
-                  className="group bg-[#0b1329] border border-slate-800/90 hover:border-rose-500/40 rounded-2xl overflow-hidden shadow-lg hover:shadow-2xl hover:shadow-rose-950/20 transition-all duration-300 flex flex-col cursor-pointer"
-                >
-                  {/* Image Container */}
-                  <div className="relative aspect-[16/10] overflow-hidden bg-slate-900">
-                    <img
-                      src={item.image}
-                      alt={item.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                      loading="lazy"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-[#0b1329] via-transparent to-transparent opacity-80" />
+            <div className="relative w-full h-[500px] bg-[#020617] overflow-hidden flex items-center justify-center p-6">
+              {/* Map Canvas Background Grid */}
+              <div className="absolute inset-0 opacity-20 bg-[radial-gradient(#475569_1px,transparent_1px)] [background-size:24px_24px]" />
+              <div className="absolute w-72 h-72 rounded-full border border-rose-500/20 animate-pulse" />
+              <div className="absolute w-96 h-96 rounded-full border border-slate-800/50" />
 
-                    {/* Category Badge */}
-                    <span
-                      className={`absolute top-3 left-3 px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider border backdrop-blur-md ${badge.color}`}
+              {/* Center User Location Pin */}
+              <div className="absolute flex flex-col items-center z-20 pointer-events-none">
+                <div className="w-4 h-4 rounded-full bg-rose-500 border-2 border-white shadow-lg animate-ping" />
+                <span className="text-[10px] font-black bg-rose-600 text-white px-2 py-0.5 rounded-full mt-1">
+                  You are here ({currentCity})
+                </span>
+              </div>
+
+              {/* Interactive Service Markers */}
+              {items.map((item, index) => {
+                // Distribute marker coordinates radially based on index and distance
+                const angle = (index * (360 / Math.max(items.length, 1))) * (Math.PI / 180);
+                const distOffset = 60 + ((index * 37) % 150);
+                const x = Math.cos(angle) * distOffset;
+                const y = Math.sin(angle) * distOffset;
+
+                const isSelected = selectedMapItem?.id === item.id;
+
+                return (
+                  <div
+                    key={item.id}
+                    style={{ transform: `translate(${x}px, ${y}px)` }}
+                    className="absolute z-30 transition-transform duration-300"
+                  >
+                    <button
+                      onClick={() => setSelectedMapItem(item)}
+                      className={`p-2 rounded-2xl border flex items-center gap-1.5 shadow-xl transition-all ${
+                        isSelected
+                          ? 'bg-rose-600 border-white text-white scale-125 z-40 ring-4 ring-rose-500/30'
+                          : 'bg-slate-900 border-slate-700 text-slate-200 hover:scale-110 hover:border-rose-400'
+                      }`}
                     >
-                      {badge.label}
-                    </span>
+                      <MapPin className="w-4 h-4 text-rose-400" />
+                      <span className="text-[10px] font-bold max-w-[90px] truncate">{item.title}</span>
+                    </button>
+                  </div>
+                );
+              })}
 
-                    {/* Distance Tag */}
-                    {item.distanceKm !== undefined && item.distanceKm !== null && (
-                      <span className="absolute bottom-3 left-3 bg-slate-950/80 backdrop-blur-md border border-slate-700 px-2.5 py-1 rounded-lg text-[11px] font-bold text-white flex items-center gap-1 shadow-md">
-                        <MapPin className="w-3 h-3 text-rose-500" />
-                        <span>{item.distanceKm} km away</span>
-                      </span>
-                    )}
-
-                    {/* Rating Badge */}
-                    {item.rating && (
-                      <span className="absolute top-3 right-3 bg-slate-950/80 backdrop-blur-md border border-amber-500/30 px-2 py-1 rounded-lg text-[11px] font-bold text-amber-300 flex items-center gap-1">
-                        <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
-                        <span>{item.rating.toFixed(1)}</span>
-                      </span>
-                    )}
+              {/* Selected Marker Detail Card Float */}
+              {selectedMapItem && (
+                <div className="absolute bottom-6 left-6 z-40 max-w-sm w-full bg-slate-900/95 backdrop-blur-md border border-slate-700 rounded-3xl p-4 shadow-2xl space-y-3 animate-fadeIn text-slate-200">
+                  <div className="flex items-start justify-between gap-3">
+                    <img
+                      src={selectedMapItem.image}
+                      alt={selectedMapItem.title}
+                      className="w-16 h-16 rounded-2xl object-cover shrink-0 border border-slate-700"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between text-[10px]">
+                        <span className="font-bold text-rose-400 uppercase">{selectedMapItem.category}</span>
+                        <span className="text-amber-400 font-bold flex items-center gap-1">
+                          <Star className="w-3 h-3 fill-amber-400" />
+                          {selectedMapItem.rating}
+                        </span>
+                      </div>
+                      <h4 className="font-bold text-sm text-white truncate mt-0.5">{selectedMapItem.title}</h4>
+                      <p className="text-xs text-slate-400 truncate">{selectedMapItem.location || currentCity}</p>
+                    </div>
+                    <button
+                      onClick={() => setSelectedMapItem(null)}
+                      className="text-slate-400 hover:text-white"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
                   </div>
 
-                  {/* Content */}
-                  <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
-                    <div>
-                      <h3 className="text-base font-bold text-white line-clamp-1 group-hover:text-rose-400 transition-colors">
-                        {item.title}
-                      </h3>
-                      <p className="text-xs text-slate-400 line-clamp-2 mt-1">
-                        {item.description}
-                      </p>
-                    </div>
-
-                    {/* Location & Availability Footer */}
-                    <div className="pt-2 border-t border-slate-800/80 space-y-2">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-slate-400 truncate max-w-[160px]">
-                          📍 {item.location || item.city || currentCity}
-                        </span>
-                        <span
-                          className={`font-bold text-[10px] uppercase tracking-wider px-2 py-0.5 rounded ${
-                            isAvailable
-                              ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                              : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
-                          }`}
-                        >
-                          {isAvailable ? 'Available' : 'Sold Out'}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center justify-between pt-1">
-                        <div>
-                          <span className="text-[10px] text-slate-400 uppercase font-bold block">Starting From</span>
-                          <span className="text-sm font-black text-rose-400">
-                            ₹{item.priceFrom?.toLocaleString('en-IN') || 250}
-                          </span>
-                        </div>
-
-                        <span className="flex items-center gap-1 px-3 py-1.5 bg-rose-600 group-hover:bg-rose-500 text-white rounded-xl text-xs font-bold transition-all shadow-md">
-                          <span>Book</span>
-                          <ChevronRight className="w-3.5 h-3.5" />
-                        </span>
-                      </div>
+                  <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-800">
+                    <span className="font-black text-white">
+                      ₹{selectedMapItem.priceFrom || 250}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <a
+                        href={`https://www.google.com/maps/dir/?api=1&destination=${selectedMapItem.latitude || 23.688},${selectedMapItem.longitude || 86.966}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-bold flex items-center gap-1"
+                        title="Get Turn-by-Turn Directions"
+                      >
+                        <Navigation className="w-3 h-3 text-cyan-400" />
+                        <span>Navigate</span>
+                      </a>
+                      <button
+                        onClick={() => handleItemClick(selectedMapItem)}
+                        className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold shadow-md"
+                      >
+                        Book Now
+                      </button>
                     </div>
                   </div>
                 </div>
-              );
-            })}
+              )}
+            </div>
           </div>
         )}
 
+        {/* Results Grid View */}
+        {viewMode === 'grid' && (
+          loading ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="bg-slate-900/50 border border-slate-800 rounded-2xl h-80 animate-pulse"
+                />
+              ))}
+            </div>
+          ) : items.length === 0 ? (
+            /* Empty State */
+            <div className="py-16 px-4 text-center bg-[#0f172a]/40 border border-slate-800/80 rounded-3xl space-y-4 max-w-lg mx-auto">
+              <div className="w-16 h-16 bg-rose-600/10 border border-rose-500/30 rounded-2xl flex items-center justify-center text-rose-500 mx-auto">
+                <MapPin className="w-8 h-8" />
+              </div>
+              <h3 className="text-xl font-bold text-white">No items found within {radius} km</h3>
+              <p className="text-xs text-slate-400">
+                We couldn't find any live inventory matching your criteria in this exact radius. Try expanding your search radius or switching categories.
+              </p>
+              <div className="pt-2 flex flex-wrap items-center justify-center gap-3">
+                <button
+                  onClick={() => setRadius(25)}
+                  className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl transition-colors shadow-md"
+                >
+                  Expand Radius to 25 km
+                </button>
+                <button
+                  onClick={() => setCategory('ALL')}
+                  className="px-4 py-2 bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 font-bold text-xs rounded-xl transition-colors"
+                >
+                  Show All Categories
+                </button>
+              </div>
+            </div>
+          ) : (
+            /* Inventory Items Grid */
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              {items.map((item) => {
+                const badge = getCategoryBadge(item.category);
+                const isAvailable = item.availability === 'AVAILABLE' || item.availability === 'LIMITED';
+
+                return (
+                  <div
+                    key={item.id}
+                    onClick={() => handleItemClick(item)}
+                    className="group bg-[#0b1329] border border-slate-800/90 hover:border-rose-500/40 rounded-2xl overflow-hidden shadow-lg hover:shadow-2xl hover:shadow-rose-950/20 transition-all duration-300 flex flex-col cursor-pointer"
+                  >
+                    {/* Image Container */}
+                    <div className="relative aspect-[16/10] overflow-hidden bg-slate-900">
+                      <img
+                        src={item.image}
+                        alt={item.title}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        loading="lazy"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-[#0b1329] via-transparent to-transparent opacity-80" />
+
+                      {/* Category Badge */}
+                      <span
+                        className={`absolute top-3 left-3 px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider border backdrop-blur-md ${badge.color}`}
+                      >
+                        {badge.label}
+                      </span>
+
+                      {/* Distance Tag */}
+                      {item.distanceKm !== undefined && item.distanceKm !== null && (
+                        <span className="absolute bottom-3 left-3 bg-slate-950/80 backdrop-blur-md border border-slate-700 px-2.5 py-1 rounded-lg text-[11px] font-bold text-white flex items-center gap-1 shadow-md">
+                          <MapPin className="w-3 h-3 text-rose-500" />
+                          <span>{item.distanceKm} km away</span>
+                        </span>
+                      )}
+
+                      {/* Rating Badge */}
+                      {item.rating && (
+                        <span className="absolute top-3 right-3 bg-slate-950/80 backdrop-blur-md border border-amber-500/30 px-2 py-1 rounded-lg text-[11px] font-bold text-amber-300 flex items-center gap-1">
+                          <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                          <span>{item.rating.toFixed(1)}</span>
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Content */}
+                    <div className="p-4 flex-1 flex flex-col justify-between space-y-3">
+                      <div>
+                        <h3 className="text-base font-bold text-white line-clamp-1 group-hover:text-rose-400 transition-colors">
+                          {item.title}
+                        </h3>
+                        <p className="text-xs text-slate-400 line-clamp-2 mt-1">
+                          {item.description}
+                        </p>
+                      </div>
+
+                      {/* Location & Availability Footer */}
+                      <div className="pt-2 border-t border-slate-800/80 space-y-2">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-slate-400 truncate max-w-[160px]">
+                            📍 {item.location || item.city || currentCity}
+                          </span>
+                          <span
+                            className={`font-bold text-[10px] uppercase tracking-wider px-2 py-0.5 rounded ${
+                              isAvailable
+                                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                            }`}
+                          >
+                            {isAvailable ? 'Available' : 'Sold Out'}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-between pt-1">
+                          <div>
+                            <span className="text-[10px] text-slate-400 uppercase font-bold block">Starting From</span>
+                            <span className="text-sm font-black text-rose-400">
+                              ₹{item.priceFrom?.toLocaleString('en-IN') || 250}
+                            </span>
+                          </div>
+
+                          <span className="flex items-center gap-1 px-3 py-1.5 bg-rose-600 group-hover:bg-rose-500 text-white rounded-xl text-xs font-bold transition-all shadow-md">
+                            <span>Book</span>
+                            <ChevronRight className="w-3.5 h-3.5" />
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )
+        )}
+
         {/* Pagination Controls */}
-        {pagination.totalPages > 1 && (
+        {pagination.totalPages > 1 && viewMode === 'grid' && (
           <div className="flex items-center justify-center gap-2 pt-8">
             <button
               onClick={() => setPage((p) => Math.max(1, p - 1))}

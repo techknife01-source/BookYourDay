@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { catalogApi } from '../api/catalogApi';
 import { MovieCard } from '../components/cards/MovieCard';
-import { Film, Filter, Loader2 } from 'lucide-react';
+import { Film, Filter, Loader2, RotateCcw } from 'lucide-react';
 import { Movie } from '../types';
 
 export const MoviesPage: React.FC = () => {
@@ -48,12 +48,35 @@ export const MoviesPage: React.FC = () => {
     return () => { mounted = false; };
   }, []);
 
-  const filteredMovies = movies.filter((m) => {
-    if (selectedLanguage !== 'all' && !m.language.includes(selectedLanguage)) return false;
-    if (selectedGenre !== 'all' && !m.genre.includes(selectedGenre)) return false;
-    if (selectedFormat !== 'all' && !m.format.includes(selectedFormat)) return false;
-    return true;
-  });
+  const handleClearFilters = () => {
+    setSelectedLanguage('all');
+    setSelectedGenre('all');
+    setSelectedFormat('all');
+    setActiveTab('showing');
+  };
+
+  const filteredMovies = movies
+    .filter((m) => {
+      if (selectedLanguage !== 'all' && !m.language.some((l) => l.toLowerCase() === selectedLanguage.toLowerCase())) {
+        return false;
+      }
+      if (selectedGenre !== 'all' && !m.genre.some((g) => g.toLowerCase() === selectedGenre.toLowerCase())) {
+        return false;
+      }
+      if (selectedFormat !== 'all' && !m.format.some((f) => f.toLowerCase() === selectedFormat.toLowerCase())) {
+        return false;
+      }
+      if (activeTab === 'coming') {
+        return (m as any).status === 'UPCOMING' || (m.releaseDate && m.releaseDate.includes('2026') && m.releaseDate.includes('Sep'));
+      }
+      return true;
+    })
+    .sort((a, b) => {
+      if (activeTab === 'popular') {
+        return b.rating - a.rating;
+      }
+      return 0;
+    });
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
@@ -64,7 +87,7 @@ export const MoviesPage: React.FC = () => {
           <span>CINEMA EXPERIENCE</span>
         </div>
         <h1 className="text-3xl sm:text-4xl font-black text-white">Movies in Cinemas</h1>
-        <p className="text-slate-400 text-sm">Discover top blockbusters, IMAX screenings & 4DX experiences</p>
+        <p className="text-slate-400 text-sm">Discover top blockbusters, IMAX screenings & 4DX experiences across regional and global cinema</p>
       </div>
 
       {/* Tabs */}
@@ -89,50 +112,72 @@ export const MoviesPage: React.FC = () => {
       </div>
 
       {/* Filter Toolbar */}
-      <div className="p-4 bg-slate-900/60 border border-slate-800 rounded-2xl flex flex-wrap items-center gap-4 text-xs">
-        <div className="flex items-center gap-2 text-slate-400 font-bold">
-          <Filter className="w-4 h-4 text-rose-500" />
-          <span>FILTERS:</span>
+      <div className="p-4 bg-slate-900/60 border border-slate-800 rounded-2xl flex flex-wrap items-center justify-between gap-4 text-xs">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2 text-slate-400 font-bold">
+            <Filter className="w-4 h-4 text-rose-500" />
+            <span>FILTERS:</span>
+          </div>
+
+          {/* Language dropdown */}
+          <select
+            value={selectedLanguage}
+            onChange={(e) => setSelectedLanguage(e.target.value)}
+            className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 font-semibold focus:outline-none"
+          >
+            <option value="all">All Languages</option>
+            <option value="English">English</option>
+            <option value="Hindi">Hindi</option>
+            <option value="Bengali">Bengali</option>
+            <option value="Telugu">Telugu</option>
+            <option value="Tamil">Tamil</option>
+            <option value="Malayalam">Malayalam</option>
+            <option value="Kannada">Kannada</option>
+          </select>
+
+          {/* Genre dropdown */}
+          <select
+            value={selectedGenre}
+            onChange={(e) => setSelectedGenre(e.target.value)}
+            className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 font-semibold focus:outline-none"
+          >
+            <option value="all">All Genres</option>
+            <option value="Action">Action</option>
+            <option value="Sci-Fi">Sci-Fi</option>
+            <option value="Drama">Drama</option>
+            <option value="Thriller">Thriller</option>
+            <option value="Comedy">Comedy</option>
+            <option value="Horror">Horror</option>
+            <option value="Family">Family</option>
+            <option value="Mythology">Mythology</option>
+          </select>
+
+          {/* Format dropdown */}
+          <select
+            value={selectedFormat}
+            onChange={(e) => setSelectedFormat(e.target.value)}
+            className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 font-semibold focus:outline-none"
+          >
+            <option value="all">All Formats</option>
+            <option value="2D">2D</option>
+            <option value="3D">3D</option>
+            <option value="IMAX 3D">IMAX 3D</option>
+            <option value="IMAX 2D">IMAX 2D</option>
+            <option value="4DX">4DX</option>
+            <option value="Dolby Atmos">Dolby Atmos</option>
+          </select>
         </div>
 
-        {/* Language dropdown */}
-        <select
-          value={selectedLanguage}
-          onChange={(e) => setSelectedLanguage(e.target.value)}
-          className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 font-semibold focus:outline-none"
-        >
-          <option value="all">All Languages</option>
-          <option value="English">English</option>
-          <option value="Hindi">Hindi</option>
-          <option value="Tamil">Tamil</option>
-          <option value="Spanish">Spanish</option>
-        </select>
-
-        {/* Genre dropdown */}
-        <select
-          value={selectedGenre}
-          onChange={(e) => setSelectedGenre(e.target.value)}
-          className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 font-semibold focus:outline-none"
-        >
-          <option value="all">All Genres</option>
-          <option value="Sci-Fi">Sci-Fi</option>
-          <option value="Action">Action</option>
-          <option value="Drama">Drama</option>
-          <option value="Fantasy">Fantasy</option>
-        </select>
-
-        {/* Format dropdown */}
-        <select
-          value={selectedFormat}
-          onChange={(e) => setSelectedFormat(e.target.value)}
-          className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 font-semibold focus:outline-none"
-        >
-          <option value="all">All Formats</option>
-          <option value="IMAX 3D">IMAX 3D</option>
-          <option value="3D">3D</option>
-          <option value="4DX">4DX</option>
-          <option value="2D">2D</option>
-        </select>
+        {/* Clear Filters */}
+        {(selectedLanguage !== 'all' || selectedGenre !== 'all' || selectedFormat !== 'all' || activeTab !== 'showing') && (
+          <button
+            onClick={handleClearFilters}
+            className="flex items-center gap-1.5 text-slate-400 hover:text-rose-400 font-bold"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span>Reset Filters</span>
+          </button>
+        )}
       </div>
 
       {/* Loading state */}
@@ -145,6 +190,12 @@ export const MoviesPage: React.FC = () => {
         <div className="p-12 text-center bg-slate-900/40 border border-slate-800 rounded-3xl space-y-2">
           <h3 className="text-lg font-bold text-white">No Movies Found</h3>
           <p className="text-xs text-slate-400">Try adjusting your language, genre or format filters.</p>
+          <button
+            onClick={handleClearFilters}
+            className="mt-3 px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl"
+          >
+            Clear All Filters
+          </button>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
