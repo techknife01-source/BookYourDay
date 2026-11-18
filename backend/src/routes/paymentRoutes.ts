@@ -14,6 +14,7 @@ router.post('/razorpay/verify', authenticate, PaymentController.verifyPayment);
 
 // POST /api/payments/webhook (Razorpay Webhook)
 router.post('/webhook', PaymentController.handleWebhook);
+router.post('/razorpay/webhook', PaymentController.handleWebhook);
 
 // GET /api/payments/history (Auth required)
 router.get('/history', authenticate, PaymentController.getPaymentHistory);
