@@ -15,9 +15,16 @@ async function runEndToEndVerification() {
 
   // Step 1: Connect to Database & Seed
   console.log('📦 Step 1: Connecting to Database & Seeding...');
-  const connected = await connectDB();
+  let memServer: any = null;
+  let connected = await connectDB();
   if (!connected) {
-    throw new Error('Database connection failed');
+    console.log('ℹ️ [Test] Standalone local MongoDB not active. Launching isolated MongoMemoryServer for test execution...');
+    const { MongoMemoryServer } = await import('mongodb-memory-server');
+    memServer = await MongoMemoryServer.create();
+    const memUri = memServer.getUri();
+    await mongoose.connect(memUri, { dbName: 'book-your-day' });
+    connected = true;
+    console.log(`✅ [Test] Connected to isolated test MongoDB at ${memUri}`);
   }
   await runSeed();
   console.log('✅ Database connected and fully seeded.\n');
@@ -356,9 +363,12 @@ async function runEndToEndVerification() {
     console.error('\n❌ End-to-End Verification failed with error:', error?.message);
     return false;
   } finally {
-    server.close();
+    if (server) server.close();
     if (mongoose.connection.readyState === 1) {
       await mongoose.disconnect();
+    }
+    if (memServer) {
+      await memServer.stop();
     }
   }
 }

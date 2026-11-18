@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import mongoose from 'mongoose';
 import { AuthRequest } from '../middleware/authMiddleware.js';
 import { BookingModel } from '../models/Booking.js';
 import { TicketModel } from '../models/Ticket.js';
@@ -30,7 +31,7 @@ export class BookingController {
       city = 'Asansol',
       date = new Date().toISOString().split('T')[0],
       time = '19:30',
-      seatsOrTicketsDetails = '1 Ticket',
+      seatsOrTicketsDetails,
       quantity = 1,
       unitPrice = 450,
       couponCode,
@@ -148,7 +149,7 @@ export class BookingController {
         city,
         date,
         time,
-        seatsOrTicketsDetails,
+        seatsOrTicketsDetails: (seatsToLock.length > 0 ? seatsToLock.join(', ') : (seatsOrTicketsDetails || (quantity > 1 ? `${quantity} Tickets` : '1 Ticket'))),
         quantity,
         subtotal: pricing.subtotal,
         convenienceFee: pricing.convenienceFee,
@@ -178,7 +179,7 @@ export class BookingController {
         userId,
         itemTitle,
         venueOrCinema,
-        seatDetails: seatsOrTicketsDetails,
+        seatDetails: bookingData.seatsOrTicketsDetails,
         qrCode: qrCodeData,
         validDate: date,
         validTime: time,
@@ -414,9 +415,12 @@ export class BookingController {
           if (matches) seatsToRelease = matches;
         }
         if (seatsToRelease.length > 0) {
+          const showQuery = mongoose.isValidObjectId(booking.showId)
+            ? { _id: new mongoose.Types.ObjectId(booking.showId) }
+            : { _id: booking.showId };
           await ShowModel.updateOne(
-            { _id: booking.showId },
-            { $pull: { bookedSeats: { $in: seatsToRelease } } }
+            showQuery,
+            { $pullAll: { bookedSeats: seatsToRelease } }
           ).catch(console.error);
         }
       }

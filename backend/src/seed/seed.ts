@@ -33,6 +33,11 @@ export async function runSeed() {
     }
   }
 
+  if (process.env.NODE_ENV === 'production' && process.env.ALLOW_PRODUCTION_SEED !== 'true') {
+    console.error('❌ [Seed] Refusing to run destructive seed in production without ALLOW_PRODUCTION_SEED=true.');
+    return false;
+  }
+
   try {
     // 1. Clear existing collections for a clean seed
     console.log('🧹 [Seed] Clearing existing collections...');

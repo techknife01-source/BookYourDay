@@ -11,12 +11,25 @@ export async function connectDatabase(): Promise<boolean> {
   if (hasAttemptedConnection && connectionResult) return true;
   hasAttemptedConnection = true;
   mongoose.set('bufferCommands', false);
-  const rawUri = env.MONGODB_URI || process.env.MONGODB_URI || '';
-  const uri = rawUri.trim() !== '' && !rawUri.includes('<USE_THE_MONGODB_ATLAS_URI') 
-    ? rawUri 
+
+  const isProduction = env.NODE_ENV === 'production' || process.env.NODE_ENV === 'production';
+  const rawUri = (process.env.MONGODB_URI || env.MONGODB_URI || '').trim();
+
+  // In production, MONGODB_URI is strictly required and cannot be empty, localhost, or placeholder
+  if (isProduction) {
+    if (!rawUri || rawUri.includes('<USE_THE_MONGODB_ATLAS_URI') || rawUri.includes('127.0.0.1') || rawUri.includes('localhost')) {
+      const msg = '❌ [Database] MONGODB_URI is required and must point to a valid MongoDB Atlas cluster in production. Startup aborted.';
+      console.error(msg);
+      throw new Error(msg);
+    }
+  }
+
+  // Use configured URI or fallback to local default for development/test
+  const uri = rawUri !== '' && !rawUri.includes('<USE_THE_MONGODB_ATLAS_URI')
+    ? rawUri
     : 'mongodb://127.0.0.1:27017/bookyourday';
 
-  // Configure optional custom DNS servers
+  // Configure optional custom DNS servers (useful for Atlas SRV lookups on restricted DNS environments)
   const rawDnsServers = env.MONGODB_DNS_SERVERS || process.env.MONGODB_DNS_SERVERS || '';
   if (rawDnsServers.trim().length > 0) {
     const servers = rawDnsServers
@@ -34,60 +47,46 @@ export async function connectDatabase(): Promise<boolean> {
     }
   }
 
-  const isProduction = env.NODE_ENV === 'production';
+  const options: mongoose.ConnectOptions = {
+    dbName: 'book-your-day',
+    serverSelectionTimeoutMS: isProduction ? 10000 : 3000,
+    connectTimeoutMS: isProduction ? 10000 : 3000,
+  };
 
   try {
-    const options: mongoose.ConnectOptions = {
-      dbName: 'book-your-day',
-      serverSelectionTimeoutMS: 2000,
-      connectTimeoutMS: 2000,
-    };
-
     const conn = await mongoose.connect(uri, options);
     console.log(`✅ [Database] MongoDB Connected successfully! Host: ${conn.connection.host} | DB: book-your-day`);
 
-    // Check if initial seeding is required
-    const movieCount = await (MovieModel as any).countDocuments().catch(() => 0);
-    if (movieCount === 0) {
-      console.log('🌱 [Database] Collections empty. Auto-seeding initial marketplace data into MongoDB...');
-      try {
-        const { runSeed } = await import('../seed/seed.js');
-        await runSeed();
-      } catch (seedErr: any) {
-        console.warn(`⚠️ [Database] Seed trigger info: ${seedErr?.message}`);
+    // In development or when explicitly allowed, check if initial seeding is required
+    if (!isProduction || process.env.ALLOW_PRODUCTION_SEED === 'true') {
+      const movieCount = await (MovieModel as any).countDocuments().catch(() => 0);
+      if (movieCount === 0) {
+        console.log('🌱 [Database] Collections empty. Auto-seeding initial marketplace data into MongoDB...');
+        try {
+          const { runSeed } = await import('../seed/seed.js');
+          await runSeed();
+        } catch (seedErr: any) {
+          console.warn(`⚠️ [Database] Seed trigger info: ${seedErr?.message}`);
+        }
       }
     }
 
     connectionResult = true;
     return true;
   } catch (error: any) {
-    const safeErrorMessage = error?.message ? error.message.replace(/mongodb\+srv:\/\/[^@]+@/, 'mongodb+srv://***:***@') : 'Connection failed';
-    if (!isProduction) {
-      try {
-        console.log(`⚠️ [Database] Standard connection failed (${safeErrorMessage}). Launching embedded MongoMemoryServer...`);
-        const { MongoMemoryServer } = await import('mongodb-memory-server');
-        const memoryServer = await MongoMemoryServer.create();
-        const memUri = memoryServer.getUri();
-        const memConn = await mongoose.connect(memUri, { dbName: 'book-your-day' });
-        console.log(`✅ [Database] MongoDB Connected via In-Memory Server! Host: ${memConn.connection.host} | DB: book-your-day`);
+    const safeErrorMessage = error?.message
+      ? error.message.replace(/mongodb\+srv:\/\/[^@]+@/, 'mongodb+srv://***:***@')
+      : 'Connection failed';
 
-        const movieCount = await (MovieModel as any).countDocuments().catch(() => 0);
-        if (movieCount === 0) {
-          console.log('🌱 [Database] Collections empty. Auto-seeding initial marketplace data into MongoDB...');
-          const { runSeed } = await import('../seed/seed.js');
-          await runSeed();
-        }
-
-        connectionResult = true;
-        return true;
-      } catch (memErr: any) {
-        console.warn(`⚠️ [Database] Embedded MongoMemoryServer launch warning: ${memErr?.message}`);
-      }
+    if (isProduction) {
+      console.error(`❌ [Database] Production MongoDB Atlas connection failed: ${safeErrorMessage}`);
+      connectionResult = false;
+      throw new Error(`Production MongoDB Atlas connection failed: ${safeErrorMessage}`);
     } else {
-      console.error(`❌ [Database] Production MongoDB connection failed: ${safeErrorMessage}`);
+      console.warn(`⚠️ [Database] Development MongoDB connection to ${uri} failed: ${safeErrorMessage}`);
+      connectionResult = false;
+      return false;
     }
-    connectionResult = false;
-    return false;
   }
 }
 
