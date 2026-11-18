@@ -6,9 +6,11 @@ const router = Router();
 
 // POST /api/payments/create-order (Auth required)
 router.post('/create-order', authenticate, PaymentController.createOrder);
+router.post('/razorpay/order', authenticate, PaymentController.createOrder);
 
 // POST /api/payments/verify (Auth required)
 router.post('/verify', authenticate, PaymentController.verifyPayment);
+router.post('/razorpay/verify', authenticate, PaymentController.verifyPayment);
 
 // POST /api/payments/webhook (Razorpay Webhook)
 router.post('/webhook', PaymentController.handleWebhook);

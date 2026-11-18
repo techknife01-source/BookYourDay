@@ -2,12 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { Clock, Sparkles, Check, Info } from 'lucide-react';
 import { Seat } from '../../types';
 import { generateSeatGrid, calculatePrice, PriceBreakdown } from '../../utils/pricing';
+import { catalogApi } from '../../api/catalogApi';
 
 interface SeatSelectorProps {
   movieTitle: string;
   cinemaName: string;
   showtime: string;
   basePrice: number;
+  showId?: string;
   onProceedToCheckout: (selectedSeats: Seat[], priceBreakdown: PriceBreakdown) => void;
 }
 
@@ -16,11 +18,35 @@ export const SeatSelector: React.FC<SeatSelectorProps> = ({
   cinemaName,
   showtime,
   basePrice,
+  showId,
   onProceedToCheckout
 }) => {
   const [seats, setSeats] = useState<Seat[]>(() => generateSeatGrid(basePrice));
   const [selectedSeatIds, setSelectedSeatIds] = useState<string[]>([]);
   const [timerSeconds, setTimerSeconds] = useState(600); // 10 minutes seat lock
+
+  useEffect(() => {
+    let mounted = true;
+    if (showId) {
+      catalogApi.getShowSeats(showId).then((data) => {
+        if (!mounted || !data || !Array.isArray(data.seats)) return;
+        const mapped: Seat[] = data.seats.map((s: any) => ({
+          id: s.id,
+          row: s.row,
+          number: s.number,
+          type: (s.type === 'recliner' || s.type === 'vip') ? 'vip' : 'standard',
+          price: s.price || basePrice,
+          status: s.status === 'occupied' ? 'occupied' : 'available'
+        }));
+        setSeats(mapped);
+      }).catch(() => {
+        if (mounted) setSeats(generateSeatGrid(basePrice));
+      });
+    } else {
+      setSeats(generateSeatGrid(basePrice));
+    }
+    return () => { mounted = false; };
+  }, [showId, basePrice]);
 
   // Countdown timer effect
   useEffect(() => {

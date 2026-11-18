@@ -118,6 +118,7 @@ export class AdminController {
           confirmedBookings,
           cancelledBookings,
           grossBookingValue,
+          totalRevenue: grossBookingValue,
           successfulPayments,
           failedPayments,
           refundAmount,

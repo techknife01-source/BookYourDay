@@ -4,6 +4,7 @@ import { userApi } from '../api/userApi';
 
 const CITY_KEY = 'byd_saved_city_v1';
 const NOTIFS_KEY = 'byd_notifs_v1';
+const WISHLIST_CACHE_KEY = 'byd_wishlist_cache_v1';
 
 const INITIAL_NOTIFICATIONS: NotificationItem[] = [
   {
@@ -80,6 +81,24 @@ export class BookingService {
     }
   }
 
+  static async rescheduleBookingAsync(bookingId: string, newDate: string, newTime: string): Promise<boolean> {
+    try {
+      await bookingsApi.rescheduleBooking(bookingId, newDate, newTime);
+      this.addNotification({
+        id: `n_${Date.now()}`,
+        title: 'Booking Rescheduled 📅',
+        message: `Booking #${bookingId} rescheduled to ${newDate} at ${newTime}.`,
+        timestamp: 'Just now',
+        type: 'booking',
+        isRead: false
+      });
+      return true;
+    } catch (err) {
+      console.warn('Backend reschedule booking error:', err);
+      return false;
+    }
+  }
+
   static transferTicket(bookingId: string, recipientContact: string): boolean {
     this.addNotification({
       id: `n_${Date.now()}`,
@@ -92,38 +111,77 @@ export class BookingService {
     return true;
   }
 
-  // Wishlist - Backend API authoritative store
+  // Wishlist - Backend API authoritative store with local cache
+  static getCachedWishlist(): { id: string; category: CategoryType }[] {
+    try {
+      const saved = localStorage.getItem(WISHLIST_CACHE_KEY);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  static setCachedWishlist(items: { id: string; category: CategoryType }[]): void {
+    try {
+      localStorage.setItem(WISHLIST_CACHE_KEY, JSON.stringify(items));
+    } catch (err) {
+      console.warn('Wishlist cache save error:', err);
+    }
+  }
+
   static async getWishlistAsync(): Promise<{ id: string; category: CategoryType }[]> {
     try {
       const wishlistRaw = await userApi.getWishlist();
-      return wishlistRaw.map((entry) => {
+      const mapped = wishlistRaw.map((entry) => {
         if (entry.includes(':')) {
           const [id, category] = entry.split(':');
           return { id, category: category.toLowerCase() as CategoryType };
         }
         return { id: entry, category: 'movies' as CategoryType };
       });
+      this.setCachedWishlist(mapped);
+      return mapped;
     } catch (err) {
-      console.warn('Backend wishlist fetch error:', err);
-      return [];
+      console.warn('Backend wishlist fetch error, returning cached:', err);
+      return this.getCachedWishlist();
     }
   }
 
   static async toggleWishlistAsync(id: string, category: CategoryType): Promise<boolean> {
     try {
-      const current = await this.getWishlistAsync();
-      const exists = current.some(item => item.id === id);
+      const current = this.getCachedWishlist();
+      const exists = current.some((item) => item.id === id);
+      let updated: { id: string; category: CategoryType }[];
+
       if (exists) {
-        await userApi.removeFromWishlist(id);
+        updated = current.filter((item) => item.id !== id);
+        this.setCachedWishlist(updated);
+        await userApi.removeFromWishlist(id).catch(() => {});
         return false;
       } else {
-        await userApi.addToWishlist(id, category);
+        updated = [...current, { id, category }];
+        this.setCachedWishlist(updated);
+        await userApi.addToWishlist(id, category).catch(() => {});
         return true;
       }
     } catch (err) {
       console.warn('Wishlist toggle error:', err);
       return false;
     }
+  }
+
+  static isInWishlist(id: string, category?: CategoryType): boolean {
+    const list = this.getCachedWishlist();
+    return list.some((item) => item.id === id);
+  }
+
+  static getWishlist(): { id: string; category: CategoryType }[] {
+    return this.getCachedWishlist();
+  }
+
+  static toggleWishlist(id: string, category: CategoryType): boolean {
+    this.toggleWishlistAsync(id, category).catch(console.error);
+    return !this.isInWishlist(id);
   }
 
   // User Profile - Backend API authoritative store
@@ -183,19 +241,6 @@ export class BookingService {
     return newBooking;
   }
 
-  static toggleWishlist(id: string, category: CategoryType): boolean {
-    this.toggleWishlistAsync(id, category).catch(console.error);
-    return true;
-  }
-
-  static isInWishlist(id: string, category?: CategoryType): boolean {
-    return false;
-  }
-
-  static getWishlist(): { id: string; category: CategoryType }[] {
-    return [];
-  }
-
   static getBookings(): Booking[] {
     return [];
   }
@@ -205,8 +250,8 @@ export class BookingService {
       id: 'usr_101',
       name: 'Alex Mercer',
       email: 'alex.mercer@example.com',
-      phone: '+1 (555) 234-5678',
-      walletBalance: 450,
+      phone: '+91 9876543210',
+      walletBalance: 2500,
       isMemberPlus: true,
       savedCity: this.getSavedCity()
     };

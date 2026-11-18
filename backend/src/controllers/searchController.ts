@@ -8,10 +8,10 @@ import { AttractionModel } from '../models/Attraction.js';
 import { ExperienceModel } from '../models/Experience.js';
 import { RestaurantModel } from '../models/Restaurant.js';
 import { HotelModel } from '../models/Hotel.js';
-import { RoomTypeModel } from '../models/RoomType.js';
 import { TravelPackageModel } from '../models/TravelPackage.js';
 import { TravelTransferModel } from '../models/TravelTransfer.js';
 import { CatalogItem } from './catalogController.js';
+import { NearbyController } from './nearbyController.js';
 
 function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -30,6 +30,8 @@ function normalizeMovie(m: any): CatalogItem {
     priceFrom: 250,
     currency: 'INR',
     availability: 'AVAILABLE',
+    city: 'All Cities',
+    location: 'Cinemas Nationwide',
     metadata: {
       genre: m.genre,
       language: m.language,
@@ -52,7 +54,7 @@ function normalizeEvent(e: any): CatalogItem {
     image: e.image,
     backdrop: e.backdrop,
     location: e.venue,
-    city: e.city,
+    city: e.city || 'Kolkata',
     rating: e.rating || 4.8,
     reviewCount: 1500,
     priceFrom: e.startingPrice,
@@ -78,7 +80,7 @@ function normalizeSports(s: any): CatalogItem {
     image: s.image,
     backdrop: s.backdrop,
     location: s.venue,
-    city: s.city,
+    city: s.city || 'Kolkata',
     rating: s.rating || 4.8,
     reviewCount: 2200,
     priceFrom: s.startingPrice,
@@ -104,7 +106,7 @@ function normalizeAttraction(a: any): CatalogItem {
     description: a.description,
     image: a.image,
     location: a.address,
-    city: a.city,
+    city: a.city || 'Asansol',
     rating: a.rating || 4.7,
     reviewCount: 3500,
     priceFrom: a.entryPrice,
@@ -126,7 +128,7 @@ function normalizeExperience(x: any): CatalogItem {
     title: x.title,
     description: x.description,
     image: x.image,
-    city: x.city,
+    city: x.city || 'Asansol',
     location: x.city,
     rating: x.rating || 4.8,
     reviewCount: 1800,
@@ -150,7 +152,7 @@ function normalizeRestaurant(r: any): CatalogItem {
     description: `${r.discountOffer || 'Gourmet Dining'} at ${r.locality}`,
     image: r.image,
     location: r.locality,
-    city: r.city,
+    city: r.city || 'Asansol',
     rating: r.rating || 4.6,
     reviewCount: 950,
     priceFrom: r.costForTwo,
@@ -174,7 +176,7 @@ function normalizeHotel(h: any, minPrice = 1500): CatalogItem {
     description: h.description,
     image: h.images?.[0] || 'https://images.unsplash.com/photo-1566073771259-6a8506099945?w=600&auto=format&fit=crop&q=80',
     location: h.address,
-    city: h.city,
+    city: h.city || 'Asansol',
     rating: h.rating || 4.8,
     reviewCount: h.reviewCount || 120,
     priceFrom: minPrice,
@@ -242,115 +244,6 @@ function normalizeTravelTransfer(tr: any): CatalogItem {
   };
 }
 
-const FALLBACK_ITEMS: CatalogItem[] = [
-  {
-    id: 'm1',
-    category: 'MOVIE',
-    title: 'Echoes of Tomorrow',
-    description: 'When humanity unlocks temporal memory transfer, a rogue agent must navigate quantum timelines to prevent the unraveling of reality.',
-    image: 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=600&auto=format&fit=crop&q=80',
-    backdrop: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=1200&auto=format&fit=crop&q=80',
-    city: 'Asansol',
-    rating: 4.9,
-    reviewCount: 42800,
-    priceFrom: 250,
-    currency: 'INR',
-    availability: 'AVAILABLE',
-    metadata: { genre: ['Sci-Fi', 'Action'], language: ['English', 'Hindi'], releaseDate: '2026-08-10' }
-  },
-  {
-    id: 'm2',
-    category: 'MOVIE',
-    title: 'Midnight Run: Eclipse',
-    description: 'A high-octane heist thriller taking place during a city-wide power outage.',
-    image: 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=600&auto=format&fit=crop&q=80',
-    backdrop: 'https://images.unsplash.com/photo-1478720568477-152d9b164e26?w=1200&auto=format&fit=crop&q=80',
-    city: 'Asansol',
-    rating: 4.7,
-    reviewCount: 28400,
-    priceFrom: 220,
-    currency: 'INR',
-    availability: 'AVAILABLE',
-    metadata: { genre: ['Action', 'Thriller'], language: ['English', 'Hindi'], releaseDate: '2026-08-02' }
-  },
-  {
-    id: 'e1',
-    category: 'EVENT',
-    title: 'Summer Indie Nights Live',
-    description: 'An electrifying outdoor indie music festival featuring live bands and food stalls.',
-    image: 'https://images.unsplash.com/photo-1501386761578-eac5c94b800a?w=600&auto=format&fit=crop&q=80',
-    location: 'Brooklyn Open Amphitheatre',
-    city: 'Asansol',
-    rating: 4.9,
-    reviewCount: 1500,
-    priceFrom: 899,
-    currency: 'INR',
-    availability: 'AVAILABLE',
-    metadata: { eventCategory: 'Concert', date: 'SAT, 24 AUG 2026' }
-  },
-  {
-    id: 'sp1',
-    category: 'SPORTS',
-    title: 'Asia T20 Super Cup Final',
-    description: 'The premier clash of Asian cricket titans live under stadium floodlights.',
-    image: 'https://images.unsplash.com/photo-1540747913346-19e32dc3e97e?w=600&auto=format&fit=crop&q=80',
-    location: 'Eden Gardens Stadium',
-    city: 'Kolkata',
-    rating: 4.9,
-    reviewCount: 2200,
-    priceFrom: 1200,
-    currency: 'INR',
-    availability: 'AVAILABLE',
-    metadata: { sportType: 'Cricket', date: 'SUN, 30 AUG 2026' }
-  },
-  {
-    id: 'a1',
-    category: 'ATTRACTION',
-    title: 'Wonderland Aqua & Theme Park',
-    description: 'Over 25 adrenaline-pumping rides, wave pools, and interactive children water zones.',
-    image: 'https://images.unsplash.com/photo-1513889961551-628c1e5e2ee9?w=600&auto=format&fit=crop&q=80',
-    location: 'NH-19 Bypass Road',
-    city: 'Asansol',
-    rating: 4.7,
-    reviewCount: 3500,
-    priceFrom: 650,
-    currency: 'INR',
-    availability: 'AVAILABLE',
-    metadata: { attractionCategory: 'Waterpark' }
-  },
-  {
-    id: 'x1',
-    category: 'EXPERIENCE',
-    title: 'River Lakeside Sunset Glamping',
-    description: 'Luxury outdoor tent stay with acoustic bonfire music, stargazing, and barbecue dinner.',
-    image: 'https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?w=600&auto=format&fit=crop&q=80',
-    city: 'Asansol',
-    rating: 4.8,
-    reviewCount: 1800,
-    priceFrom: 1850,
-    currency: 'INR',
-    availability: 'AVAILABLE',
-    metadata: { type: 'Camping' }
-  },
-  {
-    id: 'r1',
-    category: 'RESTAURANT',
-    title: 'Spice & Sizzle Fine Dining',
-    description: 'Flat 20% OFF on Gourmet Bill at Burnpur Road',
-    image: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=600&auto=format&fit=crop&q=80',
-    location: 'Burnpur Road',
-    city: 'Asansol',
-    rating: 4.7,
-    reviewCount: 950,
-    priceFrom: 1200,
-    currency: 'INR',
-    availability: 'AVAILABLE',
-    metadata: { cuisine: ['North Indian', 'Mughlai'] }
-  }
-];
-
-import { NearbyController } from './nearbyController.js';
-
 export class SearchController {
   static async search(req: Request, res: Response) {
     try {
@@ -364,10 +257,18 @@ export class SearchController {
 
       const q = req.query.q ? String(req.query.q).trim() : '';
       const rawCategory = req.query.category ? String(req.query.category).trim().toUpperCase() : '';
+      const subcategory = req.query.subcategory ? String(req.query.subcategory).trim() : '';
       const city = req.query.city ? String(req.query.city).trim() : '';
-      const minPrice = req.query.minPrice !== undefined && req.query.minPrice !== '' ? Number(req.query.minPrice) : undefined;
-      const maxPrice = req.query.maxPrice !== undefined && req.query.maxPrice !== '' ? Number(req.query.maxPrice) : undefined;
-      const minRating = req.query.minRating !== undefined && req.query.minRating !== '' ? Number(req.query.minRating) : undefined;
+
+      const rawMinPrice = req.query.minPrice !== undefined && req.query.minPrice !== '' ? Number(req.query.minPrice) : undefined;
+      const minPrice = rawMinPrice !== undefined && Number.isFinite(rawMinPrice) ? rawMinPrice : undefined;
+
+      const rawMaxPrice = req.query.maxPrice !== undefined && req.query.maxPrice !== '' ? Number(req.query.maxPrice) : undefined;
+      const maxPrice = rawMaxPrice !== undefined && Number.isFinite(rawMaxPrice) ? rawMaxPrice : undefined;
+
+      const rawMinRating = req.query.minRating !== undefined && req.query.minRating !== '' ? Number(req.query.minRating) : undefined;
+      const minRating = rawMinRating !== undefined && Number.isFinite(rawMinRating) ? rawMinRating : undefined;
+
       const date = req.query.date ? String(req.query.date).trim() : '';
       const sort = req.query.sort ? String(req.query.sort).trim().toLowerCase() : 'relevance';
       const page = Math.max(1, req.query.page ? parseInt(String(req.query.page), 10) || 1 : 1);
@@ -386,16 +287,25 @@ export class SearchController {
       const resultsPromises: Promise<CatalogItem[]>[] = [];
 
       const regexQ = q ? new RegExp(escapeRegex(q), 'i') : null;
-      const regexCity = city ? new RegExp(escapeRegex(city), 'i') : null;
-      const regexDate = date ? new RegExp(escapeRegex(date), 'i') : null;
+      const regexCity = city && city !== 'All Cities' ? new RegExp(escapeRegex(city), 'i') : null;
+      const regexSubcategory = subcategory ? new RegExp(escapeRegex(subcategory), 'i') : null;
+
+      // Date regex matcher
+      let regexDate: RegExp | null = null;
+      if (date) {
+        const dateTokens = date.replace(/[-,\/]/g, ' ').split(/\s+/).filter(Boolean);
+        if (dateTokens.length > 0) {
+          regexDate = new RegExp(dateTokens.map(escapeRegex).join('.*'), 'i');
+        }
+      }
 
       const publishedFilter = { $or: [{ partnerId: { $exists: false } }, { partnerId: null }, { status: 'PUBLISHED' }] };
 
       // 1. Movie Query
       if (queryMovies) {
         resultsPromises.push((async () => {
-          if (minPrice !== undefined && 250 < minPrice) return [];
-          if (maxPrice !== undefined && 250 > maxPrice) return [];
+          if (minPrice !== undefined && minPrice > 450) return [];
+          if (maxPrice !== undefined && maxPrice < 150) return [];
 
           const mQuery: any = { ...publishedFilter };
           if (regexQ) {
@@ -408,11 +318,14 @@ export class SearchController {
               { language: regexQ }
             ];
           }
+          if (regexSubcategory) {
+            mQuery.$or = [{ genre: regexSubcategory }, { language: regexSubcategory }, { format: regexSubcategory }];
+          }
           if (minRating !== undefined) {
             mQuery.rating = { $gte: minRating };
           }
 
-          const docs = await (MovieModel as any).find(mQuery).lean().maxTimeMS(5000).catch(() => []);
+          const docs = await (MovieModel as any).find(mQuery).lean().catch(() => []);
           return docs.map(normalizeMovie);
         })());
       }
@@ -434,6 +347,9 @@ export class SearchController {
           if (regexCity) {
             eQuery.city = regexCity;
           }
+          if (regexSubcategory) {
+            eQuery.category = regexSubcategory;
+          }
           if (minRating !== undefined) {
             eQuery.rating = { $gte: minRating };
           }
@@ -446,7 +362,7 @@ export class SearchController {
             eQuery.date = regexDate;
           }
 
-          const docs = await (EventModel as any).find(eQuery).lean().maxTimeMS(5000).catch(() => []);
+          const docs = await (EventModel as any).find(eQuery).lean().catch(() => []);
           return docs.map(normalizeEvent);
         })());
       }
@@ -468,19 +384,21 @@ export class SearchController {
           if (regexCity) {
             sQuery.city = regexCity;
           }
+          if (regexSubcategory) {
+            sQuery.sportType = regexSubcategory;
+          }
           if (minRating !== undefined) {
             sQuery.rating = { $gte: minRating };
           }
           if (minPrice !== undefined || maxPrice !== undefined) {
             sQuery.startingPrice = {};
-            if (minPrice !== undefined) sQuery.startingPrice.$gte = minPrice;
-            if (maxPrice !== undefined) sQuery.startingPrice.$lte = maxPrice;
+            if (minPrice !== undefined) eQueryStartingPrice(sQuery, minPrice, maxPrice);
           }
           if (regexDate) {
             sQuery.date = regexDate;
           }
 
-          const docs = await (SportsEventModel as any).find(sQuery).lean().maxTimeMS(5000).catch(() => []);
+          const docs = await (SportsEventModel as any).find(sQuery).lean().catch(() => []);
           return docs.map(normalizeSports);
         })());
       }
@@ -502,6 +420,9 @@ export class SearchController {
           if (regexCity) {
             aQuery.city = regexCity;
           }
+          if (regexSubcategory) {
+            aQuery.category = regexSubcategory;
+          }
           if (minRating !== undefined) {
             aQuery.rating = { $gte: minRating };
           }
@@ -511,7 +432,7 @@ export class SearchController {
             if (maxPrice !== undefined) aQuery.entryPrice.$lte = maxPrice;
           }
 
-          const docs = await (AttractionModel as any).find(aQuery).lean().maxTimeMS(5000).catch(() => []);
+          const docs = await (AttractionModel as any).find(aQuery).lean().catch(() => []);
           return docs.map(normalizeAttraction);
         })());
       }
@@ -532,6 +453,9 @@ export class SearchController {
           if (regexCity) {
             xQuery.city = regexCity;
           }
+          if (regexSubcategory) {
+            xQuery.type = regexSubcategory;
+          }
           if (minRating !== undefined) {
             xQuery.rating = { $gte: minRating };
           }
@@ -541,7 +465,7 @@ export class SearchController {
             if (maxPrice !== undefined) xQuery.pricePerPerson.$lte = maxPrice;
           }
 
-          const docs = await (ExperienceModel as any).find(xQuery).lean().maxTimeMS(5000).catch(() => []);
+          const docs = await (ExperienceModel as any).find(xQuery).lean().catch(() => []);
           return docs.map(normalizeExperience);
         })());
       }
@@ -562,6 +486,9 @@ export class SearchController {
           if (regexCity) {
             rQuery.city = regexCity;
           }
+          if (regexSubcategory) {
+            rQuery.cuisine = regexSubcategory;
+          }
           if (minRating !== undefined) {
             rQuery.rating = { $gte: minRating };
           }
@@ -571,7 +498,7 @@ export class SearchController {
             if (maxPrice !== undefined) rQuery.costForTwo.$lte = maxPrice;
           }
 
-          const docs = await (RestaurantModel as any).find(rQuery).lean().maxTimeMS(5000).catch(() => []);
+          const docs = await (RestaurantModel as any).find(rQuery).lean().catch(() => []);
           return docs.map(normalizeRestaurant);
         })());
       }
@@ -595,7 +522,7 @@ export class SearchController {
             hQuery.rating = { $gte: minRating };
           }
 
-          const docs = await (HotelModel as any).find(hQuery).lean().maxTimeMS(5000).catch(() => []);
+          const docs = await (HotelModel as any).find(hQuery).lean().catch(() => []);
           return docs.map((h: any) => normalizeHotel(h, 2500));
         })());
       }
@@ -614,10 +541,7 @@ export class SearchController {
             ];
           }
           if (regexCity) {
-            tpQuery.$or = [
-              { destination: regexCity },
-              { origin: regexCity }
-            ];
+            tpQuery.$or = [{ destination: regexCity }, { origin: regexCity }];
           }
           if (minRating !== undefined) {
             tpQuery.rating = { $gte: minRating };
@@ -628,7 +552,7 @@ export class SearchController {
             if (maxPrice !== undefined) tpQuery.startingPrice.$lte = maxPrice;
           }
 
-          const docs = await (TravelPackageModel as any).find(tpQuery).lean().maxTimeMS(5000).catch(() => []);
+          const docs = await (TravelPackageModel as any).find(tpQuery).lean().catch(() => []);
           return docs.map(normalizeTravelPackage);
         })());
       }
@@ -647,10 +571,7 @@ export class SearchController {
             ];
           }
           if (regexCity) {
-            ttQuery.$or = [
-              { destination: regexCity },
-              { origin: regexCity }
-            ];
+            ttQuery.$or = [{ destination: regexCity }, { origin: regexCity }];
           }
           if (minRating !== undefined) {
             ttQuery.rating = { $gte: minRating };
@@ -661,7 +582,7 @@ export class SearchController {
             if (maxPrice !== undefined) ttQuery.pricePerVehicle.$lte = maxPrice;
           }
 
-          const docs = await (TravelTransferModel as any).find(ttQuery).lean().maxTimeMS(5000).catch(() => []);
+          const docs = await (TravelTransferModel as any).find(ttQuery).lean().catch(() => []);
           return docs.map(normalizeTravelTransfer);
         })());
       }
@@ -669,30 +590,21 @@ export class SearchController {
       const categoryArrays = await Promise.all(resultsPromises);
       let allItems: CatalogItem[] = categoryArrays.flat();
 
-      if (allItems.length === 0) {
-        allItems = FALLBACK_ITEMS.filter((item) => {
-          if (rawCategory && rawCategory !== 'ALL' && item.category !== rawCategory && !rawCategory.includes(item.category)) {
-            return false;
-          }
-          if (q) {
-            const lowerQ = q.toLowerCase();
-            const genreStr = item.metadata?.genre ? JSON.stringify(item.metadata.genre).toLowerCase() : '';
-            const matches = item.title.toLowerCase().includes(lowerQ) ||
-              item.description.toLowerCase().includes(lowerQ) ||
-              item.category.toLowerCase().includes(lowerQ) ||
-              genreStr.includes(lowerQ) ||
-              (item.city && item.city.toLowerCase().includes(lowerQ)) ||
-              (item.location && item.location.toLowerCase().includes(lowerQ));
-            if (!matches) return false;
-          }
-          if (city) {
-            if (item.city && item.city.toLowerCase() !== city.toLowerCase()) return false;
-          }
-          if (minRating !== undefined && item.rating && item.rating < minRating) return false;
-          if (minPrice !== undefined && item.priceFrom && item.priceFrom < minPrice) return false;
-          if (maxPrice !== undefined && item.priceFrom && item.priceFrom > maxPrice) return false;
-          return true;
-        });
+      // If strict city search produced 0 results because of cross-city catalog, return top regional matching inventory
+      if (allItems.length === 0 && city && city !== 'All Cities') {
+        const fallbackResults = await Promise.all([
+          (EventModel as any).find(publishedFilter).limit(4).lean().catch(() => []),
+          (SportsEventModel as any).find(publishedFilter).limit(4).lean().catch(() => []),
+          (AttractionModel as any).find(publishedFilter).limit(4).lean().catch(() => []),
+          (RestaurantModel as any).find(publishedFilter).limit(4).lean().catch(() => [])
+        ]);
+
+        allItems = [
+          ...fallbackResults[0].map(normalizeEvent),
+          ...fallbackResults[1].map(normalizeSports),
+          ...fallbackResults[2].map(normalizeAttraction),
+          ...fallbackResults[3].map(normalizeRestaurant)
+        ];
       }
 
       // Sorting
@@ -702,14 +614,18 @@ export class SearchController {
         allItems.sort((a, b) => (b.priceFrom || 0) - (a.priceFrom || 0));
       } else if (sort === 'rating') {
         allItems.sort((a, b) => (b.rating || 0) - (a.rating || 0));
+      } else if (sort === 'most_reviewed' || sort === 'reviews') {
+        allItems.sort((a, b) => (b.reviewCount || 0) - (a.reviewCount || 0));
+      } else if (sort === 'popularity') {
+        allItems.sort((a, b) => ((b.rating || 4) * (b.reviewCount || 100)) - ((a.rating || 4) * (a.reviewCount || 100)));
       } else if (sort === 'newest') {
         allItems.sort((a, b) => {
           const dateA = a.metadata?.date || a.metadata?.releaseDate || '';
           const dateB = b.metadata?.date || b.metadata?.releaseDate || '';
-          return dateB.localeCompare(dateA);
+          return String(dateB).localeCompare(String(dateA));
         });
       } else {
-        // Default sort: 'relevance'
+        // Relevance sorting
         if (q) {
           const lowerQ = q.toLowerCase();
           allItems.sort((a, b) => {
@@ -766,4 +682,10 @@ export class SearchController {
       });
     }
   }
+}
+
+function eQueryStartingPrice(queryObj: any, min?: number, max?: number) {
+  queryObj.startingPrice = {};
+  if (min !== undefined) queryObj.startingPrice.$gte = min;
+  if (max !== undefined) queryObj.startingPrice.$lte = max;
 }

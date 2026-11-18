@@ -1,26 +1,86 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Calendar, MapPin, ArrowLeft, Ticket, ShieldCheck, Star } from 'lucide-react';
+import { Calendar, MapPin, ArrowLeft, Loader2 } from 'lucide-react';
+import { catalogApi } from '../api/catalogApi';
 import { MOCK_EVENTS } from '../data/mockData';
 import { CheckoutModal } from '../components/booking/CheckoutModal';
 import { DigitalTicketModal } from '../components/booking/DigitalTicketModal';
+import { ReviewSection } from '../components/reviews/ReviewSection';
 import { Booking } from '../types';
 import { calculatePrice } from '../utils/pricing';
 
 export const EventDetailsPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const eventItem = MOCK_EVENTS.find((e) => e.id === id) || MOCK_EVENTS[0];
 
-  const [selectedTierId, setSelectedTierId] = useState(eventItem.ticketTiers[0].id);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [eventItem, setEventItem] = useState<any>(null);
+  const [selectedTierId, setSelectedTierId] = useState<string>('');
   const [ticketQuantity, setTicketQuantity] = useState(2);
 
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [completedBooking, setCompletedBooking] = useState<Booking | null>(null);
   const [digitalTicketOpen, setDigitalTicketOpen] = useState(false);
 
-  const selectedTier = eventItem.ticketTiers.find((t) => t.id === selectedTierId) || eventItem.ticketTiers[0];
-  const priceBreakdown = calculatePrice(selectedTier.price, ticketQuantity);
+  useEffect(() => {
+    let mounted = true;
+    async function loadEvent() {
+      if (!id) return;
+      setLoading(true);
+      try {
+        const item = await catalogApi.getItemById('events', id);
+        if (!mounted) return;
+        if (item) {
+          const tiers = item.metadata?.ticketTiers || [
+            { id: 't1', name: 'General Admission', price: item.priceFrom || 899, description: 'Standard Entry Pass', availableQuantity: 100 },
+            { id: 't2', name: 'VIP Deck Pass', price: (item.priceFrom || 899) * 2, description: 'VIP Area + Welcome Drink', availableQuantity: 25 }
+          ];
+          setEventItem({
+            id: item.id,
+            title: item.title,
+            category: item.metadata?.category || 'Concert',
+            image: item.image,
+            backdrop: item.backdrop || item.image,
+            date: item.metadata?.date || 'SAT, 24 AUG 2026',
+            time: item.metadata?.time || '07:00 PM',
+            venue: item.metadata?.venue || 'City Amphitheatre',
+            city: item.city || 'Asansol',
+            description: item.description,
+            ticketTiers: tiers
+          });
+          setSelectedTierId(tiers[0]?.id || 't1');
+        } else {
+          // Fallback to mock if id matches mock
+          const mock = MOCK_EVENTS.find((e) => e.id === id) || MOCK_EVENTS[0];
+          setEventItem(mock);
+          setSelectedTierId(mock.ticketTiers[0].id);
+        }
+      } catch (err) {
+        console.warn('Error loading event:', err);
+        const mock = MOCK_EVENTS.find((e) => e.id === id) || MOCK_EVENTS[0];
+        setEventItem(mock);
+        setSelectedTierId(mock.ticketTiers[0].id);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    }
+
+    loadEvent();
+    return () => { mounted = false; };
+  }, [id]);
+
+  if (loading || !eventItem) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-slate-400 gap-3">
+        <Loader2 className="w-8 h-8 text-teal-500 animate-spin" />
+        <span className="text-xs font-bold uppercase tracking-wider">Loading Event Details...</span>
+      </div>
+    );
+  }
+
+  const selectedTier =
+    eventItem.ticketTiers.find((t: any) => t.id === selectedTierId) || eventItem.ticketTiers[0];
+  const priceBreakdown = calculatePrice(selectedTier?.price || 500, ticketQuantity);
 
   const handleBookingSuccess = (booking: Booking) => {
     setCompletedBooking(booking);
@@ -85,7 +145,7 @@ export const EventDetailsPage: React.FC = () => {
           </div>
 
           <div className="space-y-3">
-            {eventItem.ticketTiers.map((tier) => {
+            {eventItem.ticketTiers.map((tier: any) => {
               const isSelected = tier.id === selectedTierId;
               return (
                 <div
@@ -147,6 +207,15 @@ export const EventDetailsPage: React.FC = () => {
             </button>
           </div>
         </div>
+      </section>
+
+      {/* Customer Reviews Section */}
+      <section className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+        <ReviewSection
+          itemId={eventItem.id}
+          itemType="event"
+          itemTitle={eventItem.title}
+        />
       </section>
 
       {/* Checkout Modal */}

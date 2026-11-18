@@ -7,6 +7,8 @@ import { MobileNav } from './components/layout/MobileNav';
 import { LocationModal } from './components/common/LocationModal';
 import { NotificationDrawer } from './components/common/NotificationDrawer';
 import { SearchModal } from './components/common/SearchModal';
+import { LiveChatWidget } from './components/common/LiveChatWidget';
+import { AIAssistantModal } from './components/common/AIAssistantModal';
 
 import { HomePage } from './pages/HomePage';
 import { MoviesPage } from './pages/MoviesPage';
@@ -34,10 +36,11 @@ export default function App() {
   const [locationModalOpen, setLocationModalOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [searchModalOpen, setSearchModalOpen] = useState(false);
+  const [aiAssistantOpen, setAiAssistantOpen] = useState(false);
 
   return (
     <Router>
-      <div className="min-h-screen bg-[#020617] text-slate-100 flex flex-col font-sans selection:bg-rose-500 selection:text-white">
+      <div className="min-h-screen bg-[#020617] text-slate-100 flex flex-col font-sans selection:bg-rose-500 selection:text-white relative">
         {/* Navigation Bar */}
         <Navbar
           currentCity={currentCity}
@@ -61,10 +64,13 @@ export default function App() {
             />
             <Route path="/movies" element={<MoviesPage />} />
             <Route path="/movie/:id" element={<MovieDetailsPage />} />
+            <Route path="/movies/:id" element={<MovieDetailsPage />} />
             <Route path="/events" element={<EventsPage />} />
             <Route path="/event/:id" element={<EventDetailsPage />} />
+            <Route path="/events/:id" element={<EventDetailsPage />} />
             <Route path="/sports" element={<SportsPage />} />
             <Route path="/sport/:id" element={<SportsDetailsPage />} />
+            <Route path="/sports/:id" element={<SportsDetailsPage />} />
             <Route path="/attractions" element={<AttractionsPage />} />
             <Route path="/experiences" element={<ExperiencesPage />} />
             <Route path="/dining" element={<DiningPage />} />
@@ -95,6 +101,9 @@ export default function App() {
         {/* Mobile Sticky Navigation */}
         <MobileNav />
 
+        {/* Floating Live Chat Widget */}
+        <LiveChatWidget />
+
         {/* Global Modals & Drawers */}
         <LocationModal
           isOpen={locationModalOpen}
@@ -111,6 +120,12 @@ export default function App() {
         <SearchModal
           isOpen={searchModalOpen}
           onClose={() => setSearchModalOpen(false)}
+        />
+
+        <AIAssistantModal
+          isOpen={aiAssistantOpen}
+          onClose={() => setAiAssistantOpen(false)}
+          currentCity={currentCity}
         />
       </div>
     </Router>

@@ -9,6 +9,7 @@ import { PaymentModel } from '../models/Payment.js';
 import { RazorpayService } from '../services/razorpayService.js';
 import { TravelPackageModel } from '../models/TravelPackage.js';
 import { TravelTransferModel } from '../models/TravelTransfer.js';
+import { NotificationService } from '../services/notificationService.js';
 
 export class BookingController {
   static async createBooking(req: Request, res: Response) {
@@ -187,6 +188,14 @@ export class BookingController {
       await (TicketModel as any).create(ticketData).catch((err: any) => {
         console.warn('Ticket record creation warning:', err);
       });
+
+      NotificationService.sendNotification({
+        event: 'BOOKING_CONFIRMED',
+        recipientUserId: userId,
+        recipientEmail: customerEmail,
+        title: 'Booking Confirmed! 🎉',
+        message: `Your booking for ${itemTitle} (#${bookingNumber}) is confirmed.`
+      }).catch(console.error);
 
       return res.status(201).json({
         success: true,
@@ -438,6 +447,14 @@ export class BookingController {
         console.warn('Ticket status update warning on cancel:', err);
       });
 
+      NotificationService.sendNotification({
+        event: 'BOOKING_CANCELLED',
+        recipientUserId: booking.userId,
+        recipientEmail: booking.customerEmail,
+        title: 'Booking Cancelled',
+        message: `Your booking for ${booking.itemTitle} was cancelled. Refund status: ${refundStatus}.`
+      }).catch(console.error);
+
       return res.json({
         success: true,
         message: refundInfo.message,
@@ -454,6 +471,77 @@ export class BookingController {
         message: 'Failed to cancel booking',
         error: { code: 'BOOKING_CANCEL_ERROR', details: error?.message }
       });
+    }
+  }
+
+  static async rescheduleBooking(req: Request, res: Response) {
+    const authReq = req as AuthRequest;
+    const userId = authReq.user?.userId;
+    const email = authReq.user?.email;
+    const userRole = authReq.user?.role;
+    const { id } = req.params;
+    const { newDate, newTime, newSeats } = req.body;
+
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Authentication required' });
+    }
+
+    if (!newDate) {
+      return res.status(400).json({ success: false, message: 'New date is required for rescheduling' });
+    }
+
+    try {
+      let booking = await (BookingModel as any).findById(id).catch(() => null);
+      if (!booking) {
+        booking = await (BookingModel as any).findOne({ bookingNumber: id }).catch(() => null);
+      }
+
+      if (!booking) {
+        return res.status(404).json({ success: false, message: 'Booking not found' });
+      }
+
+      const isOwner = booking.userId === userId || (email && booking.customerEmail === email);
+      const isAdmin = userRole === 'admin';
+
+      if (!isOwner && !isAdmin) {
+        return res.status(403).json({ success: false, message: 'Access denied to reschedule this booking' });
+      }
+
+      if (booking.status === 'CANCELLED' || booking.status === 'REFUNDED') {
+        return res.status(400).json({ success: false, message: 'Cancelled bookings cannot be rescheduled' });
+      }
+
+      booking.date = newDate;
+      if (newTime) booking.time = newTime;
+      if (newSeats) booking.seatsOrTicketsDetails = newSeats;
+      booking.updatedAt = new Date();
+      await booking.save();
+
+      // Update ticket
+      await (TicketModel as any).updateMany(
+        { bookingId: booking._id ? booking._id.toString() : id },
+        { validDate: newDate, validTime: newTime || booking.time, seatDetails: booking.seatsOrTicketsDetails }
+      );
+
+      // Notification
+      NotificationService.sendNotification({
+        event: 'BOOKING_CONFIRMED',
+        recipientUserId: userId,
+        recipientEmail: booking.customerEmail,
+        title: 'Booking Rescheduled! 📅',
+        message: `Your booking for ${booking.itemTitle} was rescheduled to ${newDate} at ${booking.time}.`
+      }).catch(console.error);
+
+      return res.json({
+        success: true,
+        message: 'Booking rescheduled successfully!',
+        data: {
+          ...booking.toObject(),
+          id: booking._id.toString()
+        }
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: 'Failed to reschedule booking', error: err?.message });
     }
   }
 }

@@ -48,7 +48,7 @@ async function verifyGeoJSONAndIndexes() {
       allIndexesExist = false;
     }
 
-    const docs = await model.find({}).lean();
+    const docs = await (model as any).find({}).lean();
     console.log(`  Checking ${docs.length} documents for ${name}...`);
 
     for (const doc of docs as any[]) {

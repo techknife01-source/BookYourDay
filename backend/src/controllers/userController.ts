@@ -51,7 +51,7 @@ export class UserController {
   static async updateProfile(req: Request, res: Response) {
     const authReq = req as AuthRequest;
     const userId = authReq.user?.userId;
-    const { name, phone, savedCity, isMemberPlus } = req.body;
+    const { name, phone, savedCity, isMemberPlus, walletBalance } = req.body;
 
     if (!userId) {
       return res.status(401).json({ success: false, message: 'Unauthorized' });
@@ -71,6 +71,9 @@ export class UserController {
       if (phone !== undefined) user.phone = phone;
       if (savedCity !== undefined) user.savedCity = savedCity;
       if (isMemberPlus !== undefined) user.isMemberPlus = isMemberPlus;
+      if (walletBalance !== undefined && Number.isFinite(Number(walletBalance))) {
+        user.walletBalance = Number(walletBalance);
+      }
 
       await user.save();
 

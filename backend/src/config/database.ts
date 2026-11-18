@@ -7,7 +7,8 @@ let hasAttemptedConnection = false;
 let connectionResult = false;
 
 export async function connectDatabase(): Promise<boolean> {
-  if (hasAttemptedConnection) return connectionResult;
+  if (mongoose.connection.readyState === 1) return true;
+  if (hasAttemptedConnection && connectionResult) return true;
   hasAttemptedConnection = true;
   mongoose.set('bufferCommands', false);
   const rawUri = env.MONGODB_URI || process.env.MONGODB_URI || '';
@@ -61,10 +62,29 @@ export async function connectDatabase(): Promise<boolean> {
     return true;
   } catch (error: any) {
     const safeErrorMessage = error?.message ? error.message.replace(/mongodb\+srv:\/\/[^@]+@/, 'mongodb+srv://***:***@') : 'Connection failed';
-    if (isProduction) {
-      console.error(`❌ [Database] Production MongoDB connection failed: ${safeErrorMessage}`);
+    if (!isProduction) {
+      try {
+        console.log(`⚠️ [Database] Standard connection failed (${safeErrorMessage}). Launching embedded MongoMemoryServer...`);
+        const { MongoMemoryServer } = await import('mongodb-memory-server');
+        const memoryServer = await MongoMemoryServer.create();
+        const memUri = memoryServer.getUri();
+        const memConn = await mongoose.connect(memUri, { dbName: 'book-your-day' });
+        console.log(`✅ [Database] MongoDB Connected via In-Memory Server! Host: ${memConn.connection.host} | DB: book-your-day`);
+
+        const movieCount = await (MovieModel as any).countDocuments().catch(() => 0);
+        if (movieCount === 0) {
+          console.log('🌱 [Database] Collections empty. Auto-seeding initial marketplace data into MongoDB...');
+          const { runSeed } = await import('../seed/seed.js');
+          await runSeed();
+        }
+
+        connectionResult = true;
+        return true;
+      } catch (memErr: any) {
+        console.warn(`⚠️ [Database] Embedded MongoMemoryServer launch warning: ${memErr?.message}`);
+      }
     } else {
-      console.warn(`⚠️ [Database] Connection warning: ${safeErrorMessage}. Running with local memory/mock fallback.`);
+      console.error(`❌ [Database] Production MongoDB connection failed: ${safeErrorMessage}`);
     }
     connectionResult = false;
     return false;
