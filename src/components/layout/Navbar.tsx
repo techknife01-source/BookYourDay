@@ -22,21 +22,37 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [authModalOpen, setAuthModalOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
 
-  useEffect(() => {
+  const syncUserFromStorage = () => {
     try {
-      const stored = localStorage.getItem('byd_user');
-      if (stored) {
+      const stored = localStorage.getItem('byd_user') || localStorage.getItem('user');
+      if (stored && stored !== 'undefined' && stored !== 'null') {
         setCurrentUser(JSON.parse(stored));
+      } else {
+        setCurrentUser(null);
       }
     } catch {
       setCurrentUser(null);
     }
+  };
+
+  useEffect(() => {
+    syncUserFromStorage();
+    window.addEventListener('byd_auth_change', syncUserFromStorage);
+    window.addEventListener('storage', syncUserFromStorage);
+    return () => {
+      window.removeEventListener('byd_auth_change', syncUserFromStorage);
+      window.removeEventListener('storage', syncUserFromStorage);
+    };
   }, []);
 
   const handleLogout = () => {
     localStorage.removeItem('byd_auth_token');
+    localStorage.removeItem('token');
     localStorage.removeItem('byd_user');
+    localStorage.removeItem('user');
     setCurrentUser(null);
+    window.dispatchEvent(new Event('byd_auth_change'));
+    window.dispatchEvent(new Event('storage'));
     window.location.reload();
   };
 

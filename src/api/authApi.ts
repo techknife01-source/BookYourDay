@@ -23,15 +23,24 @@ export const authApi = {
       phone
     });
 
-    const token = response.data.token || (response.data as any).data?.token;
-    if (token) {
+    const token = response.data?.token || (response.data as any)?.data?.token;
+    if (token && token !== 'undefined' && token !== 'null') {
       localStorage.setItem('byd_auth_token', token);
+      localStorage.setItem('token', token);
     }
 
-    const userObj = response.data.data || response.data.user;
+    const userObj =
+      response.data?.user ||
+      (response.data as any)?.data?.user ||
+      ((response.data as any)?.data?.id ? (response.data as any)?.data : null);
+
     if (userObj) {
       localStorage.setItem('byd_user', JSON.stringify(userObj));
+      localStorage.setItem('user', JSON.stringify(userObj));
     }
+
+    window.dispatchEvent(new Event('byd_auth_change'));
+    window.dispatchEvent(new Event('storage'));
 
     return {
       token,
@@ -43,15 +52,24 @@ export const authApi = {
   register: async (payload: RegisterPayload): Promise<AuthLoginResponse> => {
     const response = await apiClient.post<ApiResponse<UserProfile> & { token?: string; user?: UserProfile }>('/auth/register', payload);
 
-    const token = response.data.token || (response.data as any).data?.token;
-    if (token) {
+    const token = response.data?.token || (response.data as any)?.data?.token;
+    if (token && token !== 'undefined' && token !== 'null') {
       localStorage.setItem('byd_auth_token', token);
+      localStorage.setItem('token', token);
     }
 
-    const userObj = response.data.data || response.data.user;
+    const userObj =
+      response.data?.user ||
+      (response.data as any)?.data?.user ||
+      ((response.data as any)?.data?.id ? (response.data as any)?.data : null);
+
     if (userObj) {
       localStorage.setItem('byd_user', JSON.stringify(userObj));
+      localStorage.setItem('user', JSON.stringify(userObj));
     }
+
+    window.dispatchEvent(new Event('byd_auth_change'));
+    window.dispatchEvent(new Event('storage'));
 
     return {
       token,
@@ -75,8 +93,11 @@ export const authApi = {
   logout: (): void => {
     try {
       localStorage.removeItem('byd_auth_token');
-      localStorage.removeItem('byd_user');
       localStorage.removeItem('token');
+      localStorage.removeItem('byd_user');
+      localStorage.removeItem('user');
+      window.dispatchEvent(new Event('byd_auth_change'));
+      window.dispatchEvent(new Event('storage'));
     } catch {
       // ignore
     }
@@ -84,7 +105,8 @@ export const authApi = {
 
   isAuthenticated: (): boolean => {
     try {
-      return Boolean(localStorage.getItem('byd_auth_token') || localStorage.getItem('token'));
+      const token = localStorage.getItem('byd_auth_token') || localStorage.getItem('token');
+      return Boolean(token && token !== 'undefined' && token !== 'null');
     } catch {
       return false;
     }

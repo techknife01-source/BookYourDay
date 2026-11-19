@@ -246,6 +246,26 @@ export class BookingService {
   }
 
   static getUserProfile(): UserProfile {
+    try {
+      const stored = localStorage.getItem('byd_user') || localStorage.getItem('user');
+      if (stored && stored !== 'undefined' && stored !== 'null') {
+        const parsed = JSON.parse(stored);
+        if (parsed && parsed.id) {
+          return {
+            id: parsed.id,
+            name: parsed.name || 'Alex Mercer',
+            email: parsed.email || 'alex.mercer@example.com',
+            phone: parsed.phone || '+91 9876543210',
+            walletBalance: typeof parsed.walletBalance === 'number' ? parsed.walletBalance : 2500,
+            isMemberPlus: Boolean(parsed.isMemberPlus),
+            savedCity: parsed.savedCity || this.getSavedCity()
+          };
+        }
+      }
+    } catch {
+      // ignore
+    }
+
     return {
       id: 'usr_101',
       name: 'Alex Mercer',

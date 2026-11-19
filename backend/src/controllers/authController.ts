@@ -83,11 +83,17 @@ export class AuthController {
         wishlist: newUser.wishlist || []
       };
 
+      const responseData = {
+        ...safeUserData,
+        user: safeUserData,
+        token
+      };
+
       return res.status(201).json({
         success: true,
         message: 'Registration successful! Welcome to Book Your Day.',
         token,
-        data: safeUserData,
+        data: responseData,
         user: safeUserData
       });
     } catch (error: any) {
@@ -114,7 +120,16 @@ export class AuthController {
       });
     }
 
+    if (!password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password is required to sign in.',
+        error: { code: 'MISSING_PASSWORD', details: 'Password is required' }
+      });
+    }
+
     const cleanEmail = (email || '').toLowerCase().trim();
+    const DEMO_EMAILS = ['alex.mercer@example.com', 'partner@bookyourday.com', 'admin@bookyourday.com'];
 
     try {
       let user: any = null;
@@ -125,7 +140,7 @@ export class AuthController {
 
         if (user) {
           // Verify password if password exists on user
-          if (user.passwordHash && password) {
+          if (user.passwordHash) {
             const passwordMatches = await bcrypt.compare(password, user.passwordHash);
             if (!passwordMatches) {
               return res.status(401).json({
@@ -134,41 +149,75 @@ export class AuthController {
                 error: { code: 'INVALID_CREDENTIALS' }
               });
             }
-          } else if (password && !user.passwordHash) {
+          } else {
             // Upgrade legacy account with password
             user.passwordHash = await bcrypt.hash(password, 10);
             await user.save();
           }
         } else {
-          // If user does not exist yet (e.g. initial demo quick login or test)
-          const passwordHash = password ? await bcrypt.hash(password, 10) : undefined;
-          const userRole = cleanEmail === 'admin@bookyourday.com' ? 'admin' : cleanEmail.includes('partner') ? 'partner' : 'user';
+          // User not found in database:
+          // Only allow auto-seeding for designated demo accounts with official demo password
+          if (DEMO_EMAILS.includes(cleanEmail)) {
+            if (password !== 'password123') {
+              return res.status(401).json({
+                success: false,
+                message: 'Invalid password. Please verify your credentials.',
+                error: { code: 'INVALID_CREDENTIALS' }
+              });
+            }
 
-          user = await (UserModel as any).create({
-            name: name || (cleanEmail.includes('admin') ? 'System Admin' : cleanEmail.includes('partner') ? 'Partner Venue Manager' : 'Alex Mercer'),
-            email: cleanEmail || `user_${Date.now()}@bookyourday.com`,
-            passwordHash,
+            const passwordHash = await bcrypt.hash('password123', 10);
+            const userRole = cleanEmail === 'admin@bookyourday.com' ? 'admin' : cleanEmail.includes('partner') ? 'partner' : 'user';
+            const demoName = cleanEmail.includes('admin') ? 'System Admin' : cleanEmail.includes('partner') ? 'Venue Partner' : 'Alex Mercer';
+
+            user = await (UserModel as any).create({
+              name: name || demoName,
+              email: cleanEmail,
+              passwordHash,
+              phone: phone || (userRole === 'admin' ? '+91 9000000000' : userRole === 'partner' ? '+91 9832100000' : '+91 9876543210'),
+              role: userRole,
+              walletBalance: userRole === 'admin' ? 50000 : userRole === 'partner' ? 12500 : 2500,
+              isMemberPlus: true,
+              savedCity: 'Asansol',
+              wishlist: []
+            });
+          } else {
+            // Nonexistent user - never create fake users or silently authenticate
+            return res.status(401).json({
+              success: false,
+              message: 'No account found with this email address. Please register.',
+              error: { code: 'USER_NOT_FOUND', details: 'No registered user matches the provided email' }
+            });
+          }
+        }
+      } else {
+        // In-memory fallback
+        if (DEMO_EMAILS.includes(cleanEmail) || cleanEmail === 'alex.mercer@example.com') {
+          if (password !== 'password123') {
+            return res.status(401).json({
+              success: false,
+              message: 'Invalid password. Please verify your credentials.',
+              error: { code: 'INVALID_CREDENTIALS' }
+            });
+          }
+          user = {
+            _id: cleanEmail.includes('admin') ? 'usr_dev_admin' : cleanEmail.includes('partner') ? 'usr_dev_partner' : 'usr_dev_101',
+            name: name || (cleanEmail.includes('admin') ? 'System Admin' : cleanEmail.includes('partner') ? 'Venue Partner' : 'Alex Mercer'),
+            email: cleanEmail,
             phone: phone || '+1 (555) 234-5678',
-            role: userRole,
+            role: cleanEmail === 'admin@bookyourday.com' ? 'admin' : cleanEmail.includes('partner') ? 'partner' : 'user',
             walletBalance: 450,
             isMemberPlus: true,
             savedCity: 'Asansol',
             wishlist: []
+          };
+        } else {
+          return res.status(401).json({
+            success: false,
+            message: 'No account found with this email address. Please register.',
+            error: { code: 'USER_NOT_FOUND', details: 'No registered user matches the provided email' }
           });
         }
-      } else {
-        // In-memory fallback
-        user = {
-          _id: 'usr_dev_101',
-          name: name || (cleanEmail.includes('admin') ? 'System Admin' : cleanEmail.includes('partner') ? 'Partner Venue Manager' : 'Alex Mercer'),
-          email: cleanEmail || 'alex.mercer@example.com',
-          phone: phone || '+1 (555) 234-5678',
-          role: cleanEmail === 'admin@bookyourday.com' ? 'admin' : 'user',
-          walletBalance: 450,
-          isMemberPlus: true,
-          savedCity: 'Asansol',
-          wishlist: []
-        };
       }
 
       const userId = user._id ? user._id.toString() : user.id;
@@ -191,10 +240,17 @@ export class AuthController {
         wishlist: user.wishlist || []
       };
 
+      const responseData = {
+        ...safeUserData,
+        user: safeUserData,
+        token
+      };
+
       return res.json({
         success: true,
+        message: `Welcome back, ${user.name}!`,
         token,
-        data: safeUserData,
+        data: responseData,
         user: safeUserData
       });
     } catch (error: any) {
