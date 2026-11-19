@@ -76,7 +76,11 @@ export class ApiClient {
 
   private getToken(): string | null {
     try {
-      return localStorage.getItem('byd_auth_token') || localStorage.getItem('token');
+      const token = localStorage.getItem('byd_auth_token') || localStorage.getItem('token');
+      if (token && token.trim() !== '' && token !== 'undefined' && token !== 'null') {
+        return token.trim();
+      }
+      return null;
     } catch {
       return null;
     }

@@ -24,31 +24,60 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
   if (!isOpen) return null;
 
   const handleLogin = async (loginEmail?: string, loginPassword?: string) => {
+    if (loading) return; // Prevent duplicate requests
     setLoading(true);
     setFeedback(null);
     try {
+      const targetEmail = (loginEmail || email).trim();
+      const targetPassword = loginPassword || password;
+
+      if (!targetEmail || !targetPassword) {
+        setFeedback({ type: 'error', message: 'Email and password are required.' });
+        setLoading(false);
+        return;
+      }
+
       const res = await apiClient.post('/auth/login', {
-        email: loginEmail || email,
-        password: loginPassword || password
+        email: targetEmail,
+        password: targetPassword
       });
 
-      if (res.data && res.data.success && res.data.data) {
-        const { user, token } = res.data.data;
+      // Strict validation: must have HTTP 200 AND success flag true
+      if (res.data && res.data.success === true) {
+        const token: string | undefined = res.data.token || res.data.data?.token;
+        const user = res.data.user || res.data.data?.user || (res.data.data?.id ? res.data.data : null);
+
+        if (!token || !user) {
+          throw new Error('Login succeeded but session data was incomplete.');
+        }
+
+        // Store tokens securely in localStorage
         localStorage.setItem('byd_auth_token', token);
+        localStorage.setItem('token', token);
         localStorage.setItem('byd_user', JSON.stringify(user));
-        setFeedback({ type: 'success', message: `Welcome back, ${user.name}!` });
+        localStorage.setItem('user', JSON.stringify(user));
+
+        // Dispatch events so Navbar and other listening components update immediately
+        window.dispatchEvent(new Event('byd_auth_change'));
+        window.dispatchEvent(new Event('storage'));
+
+        setFeedback({ type: 'success', message: `Welcome back, ${user.name || 'User'}!` });
         if (onAuthSuccess) onAuthSuccess(user);
+
         setTimeout(() => {
           onClose();
           window.location.reload();
-        }, 1000);
+        }, 500);
       } else {
-        setFeedback({ type: 'error', message: res.data?.message || 'Login failed. Check your credentials.' });
+        setFeedback({
+          type: 'error',
+          message: res.data?.message || res.data?.error?.details || 'Login failed. Check your credentials.'
+        });
       }
     } catch (err: any) {
       setFeedback({
         type: 'error',
-        message: err?.response?.data?.message || err?.message || 'Invalid email or password.'
+        message: err?.response?.data?.message || err?.response?.data?.error?.details || err?.message || 'Invalid email or password.'
       });
     } finally {
       setLoading(false);
@@ -57,34 +86,60 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return; // Prevent duplicate requests
     setLoading(true);
     setFeedback(null);
     try {
+      const cleanName = name.trim();
+      const cleanEmail = email.trim();
+
+      if (!cleanName || !cleanEmail || !password) {
+        setFeedback({ type: 'error', message: 'Name, email, and password are required.' });
+        setLoading(false);
+        return;
+      }
+
       const res = await apiClient.post('/auth/register', {
-        name,
-        email,
+        name: cleanName,
+        email: cleanEmail,
         password,
-        phone,
+        phone: phone.trim(),
         role
       });
 
-      if (res.data && res.data.success && res.data.data) {
-        const { user, token } = res.data.data;
+      if (res.data && res.data.success === true) {
+        const token: string | undefined = res.data.token || res.data.data?.token;
+        const user = res.data.user || res.data.data?.user || (res.data.data?.id ? res.data.data : null);
+
+        if (!token || !user) {
+          throw new Error('Registration succeeded but session data was incomplete.');
+        }
+
         localStorage.setItem('byd_auth_token', token);
+        localStorage.setItem('token', token);
         localStorage.setItem('byd_user', JSON.stringify(user));
+        localStorage.setItem('user', JSON.stringify(user));
+
+        window.dispatchEvent(new Event('byd_auth_change'));
+        window.dispatchEvent(new Event('storage'));
+
         setFeedback({ type: 'success', message: 'Account registered successfully!' });
         if (onAuthSuccess) onAuthSuccess(user);
+
         setTimeout(() => {
           onClose();
           window.location.reload();
-        }, 1000);
+        }, 500);
       } else {
-        setFeedback({ type: 'error', message: res.data?.message || 'Registration failed.' });
+        setFeedback({
+          type: 'error',
+          message: res.data?.message || res.data?.error?.details || 'Registration failed.'
+        });
       }
     } catch (err: any) {
       setFeedback({
         type: 'error',
-        message: err?.response?.data?.message || err?.message || 'Registration failed. Email may already be in use.'
+        message: err?.response?.data?.message || err?.response?.data?.error?.details || err?.message || 'Registration failed. Email may already be in use.'
       });
     } finally {
       setLoading(false);
@@ -92,6 +147,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
   };
 
   const handleQuickDemo = (demoEmail: string) => {
+    if (loading) return;
     setEmail(demoEmail);
     setPassword('password123');
     handleLogin(demoEmail, 'password123');
@@ -212,22 +268,25 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, onAuthSuc
               <div className="grid grid-cols-3 gap-2 text-[10px]">
                 <button
                   type="button"
+                  disabled={loading}
                   onClick={() => handleQuickDemo('alex.mercer@example.com')}
-                  className="p-2 bg-slate-950 border border-slate-800 rounded-lg text-slate-300 hover:text-white hover:border-slate-700 transition-colors"
+                  className="p-2 bg-slate-950 border border-slate-800 rounded-lg text-slate-300 hover:text-white hover:border-slate-700 disabled:opacity-50 transition-colors"
                 >
                   Alex (User)
                 </button>
                 <button
                   type="button"
+                  disabled={loading}
                   onClick={() => handleQuickDemo('partner@bookyourday.com')}
-                  className="p-2 bg-slate-950 border border-slate-800 rounded-lg text-teal-400 hover:text-white hover:border-slate-700 transition-colors"
+                  className="p-2 bg-slate-950 border border-slate-800 rounded-lg text-teal-400 hover:text-white hover:border-slate-700 disabled:opacity-50 transition-colors"
                 >
                   Partner
                 </button>
                 <button
                   type="button"
+                  disabled={loading}
                   onClick={() => handleQuickDemo('admin@bookyourday.com')}
-                  className="p-2 bg-slate-950 border border-slate-800 rounded-lg text-rose-400 hover:text-white hover:border-slate-700 transition-colors"
+                  className="p-2 bg-slate-950 border border-slate-800 rounded-lg text-rose-400 hover:text-white hover:border-slate-700 disabled:opacity-50 transition-colors"
                 >
                   Admin
                 </button>
